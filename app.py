@@ -1,6 +1,7 @@
 import streamlit as st
 import time
 from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 
@@ -8,11 +9,9 @@ st.set_page_config(page_title="Team PBN Checker", layout="centered")
 st.title("🚛 Customs PBN Batch Checker")
 st.write("Paste your list of PBNs below (one per line) and click Run.")
 
-# Multi-line text box for pasting columns from Excel
 raw_pbns = st.text_area("Paste PBNs Here", height=200, placeholder="FK44CM93\nAV99EC76\nCU23AW49").strip()
 
 if st.button("Check PBNs", type="primary"):
-    # Split text area lines into a cleaned list
     pbn_list = [p.strip() for p in raw_pbns.split("\n") if p.strip()]
     
     if not pbn_list:
@@ -22,13 +21,15 @@ if st.button("Check PBNs", type="primary"):
         progress_bar = st.progress(0)
         status_text = st.empty()
         
-        # Configure headless browser options for cloud execution
+        # Configure headless options for Linux Cloud environment
         options = webdriver.ChromeOptions()
-        options.add_argument("--headless")
+        options.add_argument("--headless=new")
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-gpu")
         
         try:
+            # Initialize Chrome
             driver = webdriver.Chrome(options=options)
             url = "https://www.ros.ie/customs-roro-control-web/ros/freight/lookup"
             
@@ -49,7 +50,7 @@ if st.button("Check PBNs", type="primary"):
                         page_text = driver.find_element(By.TAG_NAME, "body").text
                         page_text_upper = page_text.upper()
                         
-                        # Extract Trailer Number
+                        # Extract Trailer Registration
                         trailer_number = "Unknown"
                         if "TRAILER NUMBER" in page_text_upper:
                             lines = page_text.split('\n')
@@ -85,7 +86,6 @@ if st.button("Check PBNs", type="primary"):
                 
             driver.quit()
             
-            # Clear progress indicators and display final result table
             status_text.empty()
             progress_bar.empty()
             st.success("All checks complete!")
