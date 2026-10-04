@@ -33,7 +33,6 @@ jobs:
       run: |
         git config --global user.name 'github-actions[bot]'
         git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-        touch watchlist.json
-        git add watchlist.json
-        git diff --staged --quiet || git commit -m "Auto-update watchlist after check"
+        git add -A
+        git diff-index --quiet HEAD || git commit -m "Auto-update watchlist after check"
         git push
