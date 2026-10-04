@@ -2,7 +2,8 @@ name: PBN Watchlist Checker
 
 on:
   schedule:
-    - cron: '*/10 * * * *'
+    # Runs every 15 minutes
+    - cron: '*/15 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -23,6 +24,24 @@ jobs:
       with:
         python-version: '3.10'
 
+    # Fast Check: Exits in 5 seconds if watchlist is empty
+    - name: Check if Watchlist Has Items
+      id: check_list
+      run: |
+        python -c "
+        import json, os, sys
+        if not os.path.exists('watchlist.json'):
+            sys.exit(1)
+        with open('watchlist.json') as f:
+            data = json.load(f)
+        if not data:
+            print('Watchlist is empty. Exiting early.')
+            sys.exit(1)
+        print('Items found in watchlist. Proceeding...')
+        "
+      continue-on-error: false
+
+    # Heavy setup only runs when PBNs are actively on the watchlist
     - name: Install Dependencies & Chrome
       run: |
         sudo apt-get update
