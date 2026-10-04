@@ -2,8 +2,8 @@ name: PBN Watchlist Checker
 
 on:
   schedule:
-    # Runs every 15 minutes
-    - cron: '*/15 * * * *'
+    # Runs every 15 minutes between 06:00 and 21:59 UTC
+    - cron: '*/15 6-21 * * *'
   workflow_dispatch:
 
 permissions:
