@@ -15,6 +15,8 @@ jobs:
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v4
+      with:
+        ref: main
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -32,11 +34,8 @@ jobs:
         GOOGLE_CHAT_WEBHOOK: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
       run: python watcher.py
 
-    - name: Commit Updated Watchlist File
-      run: |
-        git config --global user.name 'github-actions[bot]'
-        git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-        git add -A
-        git diff-index --quiet HEAD || git commit -m "Auto-update watchlist after check"
-        git pull --rebase origin main
-        git push
+    - name: Auto-commit Watchlist Updates
+      uses: stefanzweifel/git-auto-commit-action@v5
+      with:
+        commit_message: "Auto-update watchlist after check"
+        file_pattern: "watchlist.json"
