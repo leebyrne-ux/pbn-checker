@@ -1,0 +1,38 @@
+name: PBN Watchlist Checker
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  check-watchlist:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Install Dependencies & Chrome
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y chromium-chromedriver
+        pip install selenium requests
+
+    - name: Run Watcher
+      env:
+        GOOGLE_CHAT_WEBHOOK: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
+      run: python watcher.py
+
+    - name: Commit Updated Watchlist File
+      run: |
+        git config --global user.name 'github-actions[bot]'
+        git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+        git add -A
+        git diff-index --quiet HEAD || git commit -m "Auto-update watchlist after check"
+        git push
