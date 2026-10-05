@@ -2,7 +2,8 @@ name: PBN Watchlist Checker
 
 on:
   schedule:
-    - cron: '*/15 6-21 * * *'
+    # Off-peak 15-minute schedule (3, 18, 33, 48 mins past the hour)
+    - cron: '3,18,33,48 6-21 * * *'
   workflow_dispatch:
 
 permissions:
