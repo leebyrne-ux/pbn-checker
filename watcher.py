@@ -2,98 +2,128 @@ import os
 import json
 import time
 import requests
-from zoneinfo import ZoneInfo
-from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
-WATCHLIST_FILE = "watchlist.json"
-WEBHOOK_URL = os.environ.get("GOOGLE_CHAT_WEBHOOK")
+# ROS Portal URL
+ROS_URL = "https://www.ros.ie/tis/pbn-status-web/pbnStatus"
 
-def send_chat_alert(pbn, trailer, status):
-    if not WEBHOOK_URL:
-        print("No Webhook URL found in environment variables.")
-        return
-        
-    dublin_tz = ZoneInfo("Europe/Dublin")
-    cleared_time = datetime.now(dublin_tz).strftime("%H:%M:%S")
+def get_google_chat_webhook():
+    return os.getenv("GOOGLE_CHAT_WEBHOOK")
 
-    payload = {
-        "text": f"🎉 *CUSTOMS CLEARANCE ALERT*\n\n"
-                f"• *Trailer:* `{trailer}`\n"
-                f"• *PBN ID:* `{pbn}`\n"
-                f"• *Status:* ✅ {status}\n"
-                f"• *Cleared At:* {cleared_time}\n\n"
-                f"🚚 *This unit is clear to exit the port!*"
+def send_google_chat_notification(webhook_url, trailer, pbn, status_text):
+    """Sends a formatted notification to Google Chat when a unit clears."""
+    message = {
+        "text": (
+            f"🟢 *PBN CLEARANCE ALERT*\n\n"
+            f"🚛 *Trailer / Reg:* {trailer}\n"
+            f"📄 *PBN:* {pbn}\n"
+            f"📍 *Status:* *{status_text}*\n\n"
+            f"✅ Unit cleared and removed from active watchlist."
+        )
     }
     try:
-        res = requests.post(WEBHOOK_URL, json=payload)
-        print(f"Alert sent for {pbn}: {res.status_code}")
+        res = requests.post(webhook_url, json=message, timeout=10)
+        res.raise_for_status()
+        print(f"Notification sent successfully for {trailer} ({pbn}).")
     except Exception as e:
-        print(f"Failed to send webhook: {e}")
+        print(f"Failed to send Google Chat message: {e}")
 
-def run_watcher():
-    if not os.path.exists(WATCHLIST_FILE):
-        print("No watchlist file found. Nothing to check.")
+def check_pbn_status(driver, pbn_id):
+    """Queries ROS portal for a specific PBN and returns the channel status text."""
+    driver.get(ROS_URL)
+    
+    # Locate and submit PBN input field
+    input_box = WebDriverWait(driver, 15).until(
+        EC.presence_of_element_located((By.ID, "pbn"))
+    )
+    input_box.clear()
+    input_box.send_keys(pbn_id)
+    
+    submit_btn = driver.find_element(By.ID, "submitPbn")
+    submit_btn.click()
+    
+    # Wait for status response
+    WebDriverWait(driver, 15).until(
+        EC.presence_of_element_located((By.CLASS_NAME, "status-box"))
+    )
+    
+    # Extract channel text (e.g. "Exit the Port" or "Call to Customs")
+    status_element = driver.find_element(By.CLASS_NAME, "status-box")
+    return status_element.text.strip()
+
+def main():
+    webhook_url = get_google_chat_webhook()
+    
+    # Load watchlist file
+    if not os.path.exists("watchlist.json"):
+        print("watchlist.json not found. Exiting.")
         return
 
-    with open(WATCHLIST_FILE, "r") as f:
+    with open("watchlist.json", "r") as f:
         watchlist = json.load(f)
 
     if not watchlist:
-        print("Watchlist is empty.")
+        print("Watchlist is empty. Nothing to check.")
         return
 
-    print(f"Checking {len(watchlist)} PBNs on watchlist...")
-
+    # Configure headless Chrome
     options = webdriver.ChromeOptions()
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
+    options.binary_location = "/usr/bin/chromium-browser"
 
-    driver = webdriver.Chrome(options=options)
-    url = "https://www.ros.ie/customs-roro-control-web/ros/freight/lookup"
+    driver = None
+    remaining_watchlist = []
 
-    updated_watchlist = []
-    
-    for item in watchlist:
-        pbn = item["pbn"]
-        trailer = item.get("trailer", "Unknown")
+    try:
+        driver = webdriver.Chrome(options=options)
         
-        try:
-            driver.get(url)
-            time.sleep(2)
-            inputs = driver.find_elements(By.TAG_NAME, "input")
-            
-            if inputs:
-                inputs[0].clear()
-                inputs[0].send_keys(pbn)
-                inputs[0].send_keys(Keys.ENTER)
-                time.sleep(2)
+        # Prevent Chrome from hanging indefinitely on network stalls
+        driver.set_page_load_timeout(30)
+        driver.implicitly_wait(10)
 
-                page_text = driver.find_element(By.TAG_NAME, "body").text.upper()
+        for item in watchlist:
+            pbn = item.get("pbn")
+            trailer = item.get("trailer", "Unknown")
 
-                if "EXIT THE PORT" in page_text or "EXIT" in page_text:
-                    print(f"PBN {pbn} (Trailer: {trailer}) HAS CLEARED!")
-                    send_chat_alert(pbn, trailer, "Exit the Port")
-                    # Do NOT add to updated_watchlist, so it gets removed!
+            try:
+                print(f"Checking status for Trailer: {trailer} | PBN: {pbn}...")
+                status = check_pbn_status(driver, pbn)
+                print(f"Result for {pbn}: {status}")
+
+                # Check if cleared
+                if "Exit the Port" in status:
+                    if webhook_url:
+                        send_google_chat_notification(webhook_url, trailer, pbn, status)
+                    else:
+                        print("Cleared! (Google Chat Webhook secret missing, alert skipped).")
                 else:
-                    print(f"PBN {pbn} still waiting...")
-                    updated_watchlist.append(item)
-            else:
-                updated_watchlist.append(item)
+                    # Keep on watchlist if still pending/called
+                    remaining_watchlist.append(item)
 
-        except Exception as e:
-            print(f"Error checking {pbn}: {e}")
-            updated_watchlist.append(item)
+            except Exception as item_err:
+                print(f"Error checking PBN {pbn}: {item_err}")
+                # Retain item on list if lookup failed due to network error
+                remaining_watchlist.append(item)
 
-    driver.quit()
+    except Exception as driver_err:
+        print(f"Fatal driver or ROS connection error: {driver_err}")
+        # Keep original watchlist intact if whole run crashes
+        remaining_watchlist = watchlist
 
-    # Save updated list (removes cleared units)
-    with open(WATCHLIST_FILE, "w") as f:
-        json.dump(updated_watchlist, f, indent=2)
+    finally:
+        if driver:
+            driver.quit()
+
+    # Save updated watchlist (cleared items removed)
+    with open("watchlist.json", "w") as f:
+        json.dump(remaining_watchlist, f, indent=2)
 
 if __name__ == "__main__":
-    run_watcher()
+    main()
