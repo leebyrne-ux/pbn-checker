@@ -2,7 +2,6 @@ name: PBN Watchlist Checker
 
 on:
   schedule:
-    # Runs at 3, 18, 33, and 48 minutes past the hour between 06:00 and 21:59 UTC
     - cron: '3,18,33,48 6-21 * * *'
   workflow_dispatch:
 
@@ -12,7 +11,7 @@ permissions:
 jobs:
   check-watchlist:
     runs-on: ubuntu-latest
-    timeout-minutes: 5  # Hard safety cap: terminates the runner if Chrome hangs
+    timeout-minutes: 2
 
     steps:
     - name: Checkout Repository
@@ -25,19 +24,14 @@ jobs:
       with:
         python-version: '3.10'
 
-    # Fast Check: Exits in ~2 seconds if watchlist.json is empty
     - name: Check if Watchlist Has Items
       id: check_list
       run: |
         python -c "import json, os; data = json.load(open('watchlist.json')) if os.path.exists('watchlist.json') else []; print('has_items=' + str(bool(data)).lower(), file=open(os.environ['GITHUB_OUTPUT'], 'a'))"
 
-    # Browser setup only runs if there are active trailers to check
-    - name: Install Dependencies & Chrome
+    - name: Install Dependencies
       if: steps.check_list.outputs.has_items == 'true'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y chromium-chromedriver
-        pip install selenium requests
+      run: pip install requests
 
     - name: Run Watcher
       if: steps.check_list.outputs.has_items == 'true'
