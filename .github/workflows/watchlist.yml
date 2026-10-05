@@ -23,27 +23,11 @@ jobs:
       with:
         python-version: '3.10'
 
-    # Clean check: Sets output variable 'has_items' to true/false without throwing exit errors
     - name: Check if Watchlist Has Items
       id: check_list
       run: |
-        python -c "
-        import json, os, sys
-        has_items = False
-        if os.path.exists('watchlist.json'):
-            with open('watchlist.json') as f:
-                data = json.load(f)
-                if data:
-                    has_items = True
-        if has_items:
-            print('Watchlist has items. Proceeding...')
-            print('has_items=true' >> os.environ['GITHUB_OUTPUT'])
-        else:
-            print('Watchlist is empty. Skipping remaining steps.')
-            print('has_items=false' >> os.environ['GITHUB_OUTPUT'])
-        "
+        python -c "import json, os; data = json.load(open('watchlist.json')) if os.path.exists('watchlist.json') else []; print('has_items=' + str(bool(data)).lower(), file=open(os.environ['GITHUB_OUTPUT'], 'a'))"
 
-    # Only run heavy setup if has_items is 'true'
     - name: Install Dependencies & Chrome
       if: steps.check_list.outputs.has_items == 'true'
       run: |
