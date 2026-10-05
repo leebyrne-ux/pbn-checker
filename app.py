@@ -135,6 +135,6 @@ if "last_results" in st.session_state:
 watchlist = load_watchlist()
 if watchlist:
     st.write("---")
-    st.subheader("👁️ Active Watchlist (Auto-checking every 10 min)")
+    st.subheader("👁️ Active Watchlist (Auto-checking every 15 min)")
     for w in watchlist:
         st.info(f"🚚 **Trailer:** {w['trailer']} | **PBN:** {w['pbn']} | Added at {w.get('added_at', 'N/A')}")
