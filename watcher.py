@@ -31,21 +31,21 @@ def send_google_chat_notification(webhook_url, trailer, pbn, status_text):
         print(f"Failed to send Google Chat message: {e}")
 
 def check_pbn_status(driver, pbn_id):
-    """Queries ROS portal and extracts rendered page text."""
+    """Queries ROS portal using explicit wait conditions for Angular rendering."""
     driver.get(ROS_URL)
     
-    # Wait explicitly for ROS Angular input field to load (up to 25 seconds)
-    wait = WebDriverWait(driver, 25)
+    # Wait up to 15s for ROS Angular input field to load
+    wait = WebDriverWait(driver, 15)
     input_box = wait.until(EC.presence_of_element_located((By.ID, "pbn")))
     
     input_box.clear()
     input_box.send_keys(pbn_id)
     
-    submit_btn = driver.find_element(By.ID, "submitPbn")
+    submit_btn = wait.until(EC.presence_of_element_located((By.ID, "submitPbn")))
     driver.execute_script("arguments[0].click();", submit_btn)
     
-    # Wait for Angular status calculation to render
-    time.sleep(5)
+    # Wait 4 seconds for Angular to render the clearance status
+    time.sleep(4)
     
     return driver.find_element(By.TAG_NAME, "body").text
 
@@ -79,7 +79,7 @@ def main():
 
     try:
         driver = webdriver.Chrome(options=options)
-        driver.set_page_load_timeout(30)
+        driver.set_page_load_timeout(25)
 
         for item in watchlist:
             pbn = item.get("pbn")
@@ -89,10 +89,6 @@ def main():
                 print(f"Checking status for Trailer: {trailer} | PBN: {pbn}...")
                 page_text = check_pbn_status(driver, pbn)
                 text_upper = page_text.upper()
-
-                print(f"--- RENDERED TEXT FOR {pbn} ({len(page_text)} chars) ---")
-                print(page_text[:400].replace('\n', ' '))
-                print("--------------------------------------------------")
 
                 if "EXIT THE PORT" in text_upper or "EXIT PORT" in text_upper or "EXIT" in text_upper:
                     print(f"✅ CLEARANCE DETECTED for {trailer} ({pbn})!")
@@ -116,6 +112,7 @@ def main():
         if driver:
             driver.quit()
 
+    # Save updated watchlist back to file
     with open("watchlist.json", "w") as f:
         json.dump(remaining_watchlist, f, indent=2)
 
