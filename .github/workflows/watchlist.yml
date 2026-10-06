@@ -33,10 +33,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y google-chrome-stable
 
-      - name: Verify Google Chrome
+      - name: Remove old ChromeDriver
         run: |
-          which google-chrome
+          sudo rm -f /usr/bin/chromedriver
+          sudo rm -f /usr/local/bin/chromedriver
+          echo "Chrome:"
           google-chrome --version
+          echo "ChromeDriver in PATH:"
+          which chromedriver || echo "No system ChromeDriver - Selenium Manager will provide it."
 
       - name: Install Python dependencies
         run: |
@@ -48,6 +52,17 @@ jobs:
           GOOGLE_CHAT_WEBHOOK: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
         run: |
           python watcher.py
+
+      - name: Upload ROS result screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ros-result-screenshots
+          path: |
+            ros_result_*.png
+            debug_*.png
+            debug_*.html
+          if-no-files-found: ignore
 
       - name: Commit updated watchlist
         uses: stefanzweifel/git-auto-commit-action@v5
