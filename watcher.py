@@ -34,7 +34,7 @@ def check_pbn_status(driver, pbn_id):
     """Queries ROS portal using explicit wait conditions for Angular rendering."""
     driver.get(ROS_URL)
     
-    # Wait up to 20 seconds for ROS Angular input field to attach to DOM
+    # Wait explicitly for ROS Angular input field to attach to DOM (up to 20s)
     wait = WebDriverWait(driver, 20)
     input_box = wait.until(EC.presence_of_element_located((By.ID, "pbn")))
     
@@ -45,7 +45,7 @@ def check_pbn_status(driver, pbn_id):
     driver.execute_script("arguments[0].click();", submit_btn)
     
     # Pause for status DOM update
-    time.sleep(4)
+    time.sleep(5)
     
     return driver.find_element(By.TAG_NAME, "body").text
 
