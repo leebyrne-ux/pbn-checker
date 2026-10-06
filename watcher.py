@@ -1,123 +1,524 @@
-import os
-import json
-import time
-import requests
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
+1s
+Current runner version: '2.337.0'
+Runner Image Provisioner
+Operating System
+Runner Image
+GITHUB_TOKEN Permissions
+Secret source: Actions
+Cache mode: write
+Prepare workflow directory
+Prepare all required actions
+Getting action download info
+Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+Download action repository 'actions/setup-python@v5' (SHA:a26af69be951a213d495a4c3e4e4022e16d87065)
+Download action repository 'stefanzweifel/git-auto-commit-action@v5' (SHA:b863ae1933cb653a53c021fe36dbb774e1fb9403)
+Complete job name: check-watchlist
+1s
+Run actions/checkout@v4
+Syncing repository: leebyrne-ux/pbn-checker
+Getting Git version info
+Temporarily overriding HOME='/home/runner/work/_temp/12fd2bde-2e24-4446-9f74-850ee1bfa62f' before making global git config changes
+Adding repository directory to the temporary git global config as a safe directory
+/usr/bin/git config --global --add safe.directory /home/runner/work/pbn-checker/pbn-checker
+Deleting the contents of '/home/runner/work/pbn-checker/pbn-checker'
+Initializing the repository
+Disabling automatic garbage collection
+Setting up auth
+0s
+1s
+1m 24s
+  chromium-browser chromium-chromedriver
+0 upgraded, 2 newly installed, 0 to remove and 25 not upgraded.
+Need to get 52.4 kB of archives.
+After this operation, 124 kB of additional disk space will be used.
+Get:1 file:/etc/apt/apt-mirrors.txt Mirrorlist [144 B]
+Get:2 http://azure.archive.ubuntu.com/ubuntu noble/universe amd64 chromium-browser amd64 2:1snap1-0ubuntu2 [50.0 kB]
+Get:3 http://azure.archive.ubuntu.com/ubuntu noble/universe amd64 chromium-chromedriver amd64 2:1snap1-0ubuntu2 [2308 B]
+Preconfiguring packages ...
+Fetched 52.4 kB in 0s (320 kB/s)
+Selecting previously unselected package chromium-browser.
+(Reading database ... 
+(Reading database ... 5%
+(Reading database ... 10%
+(Reading database ... 15%
+(Reading database ... 20%
+(Reading database ... 25%
+(Reading database ... 30%
+(Reading database ... 35%
+(Reading database ... 40%
+(Reading database ... 45%
+(Reading database ... 50%
+(Reading database ... 55%
+(Reading database ... 60%
+(Reading database ... 65%
+(Reading database ... 70%
+(Reading database ... 75%
+(Reading database ... 80%
+(Reading database ... 85%
+(Reading database ... 90%
+(Reading database ... 95%
+(Reading database ... 100%
+(Reading database ... 202296 files and directories currently installed.)
+Preparing to unpack .../chromium-browser_2%3a1snap1-0ubuntu2_amd64.deb ...
+=> Installing the chromium snap
+==> Checking connectivity with the snap store
+==> Installing the chromium snap
 
-ROS_URL = "https://www.ros.ie/tis/pbn-status-web/pbnStatus"
+Ensure prerequisites for "chromium" are available                              /
+Ensure prerequisites for "chromium" are available                              -
+Ensure prerequisites for "chromium" are available                              \
+Ensure prerequisites for "chromium" are available                              |
+Ensure prerequisites for "chromium" are available                              /
+Ensure prerequisites for "chromium" are available                              -
+Ensure prerequisites for "chromium" are available                              \
+Ensure prerequisites for "chromium" are available                              |
+Ensure prerequisites for "chromium" are available                              /
+Ensure prerequisites for "chromium" are available                              -
+Ensure prerequisites for "chromium" are available                              \
+Ensure prerequisites for "chromium" are available                              |
+Ensure prerequisites for "chromium" are available                              /
+Ensure prerequisites for "chromium" are available                              -
+Ensure prerequisites for "chromium" are available                              \
+Ensure prerequisites for "chromium" are available                              |
+Ensure prerequisites for "chromium" are available                              /
+Download snap "snapd" (28254) from channel "stable"                            -
+Download snap "snapd" (28254) from channel "stable"                            \
+Download snap "snapd" (28254) from channel "stable"                            |
+Download snap "snapd" (28254) from channel "stable"                            /
+Download snap "snapd" (28254) from channel "stable"                            -
+Download snap "snapd" (28254) from channel "stable"                            \
+Download snap "snapd" (28254) from channel "stable"                            |
+Download snap "snapd" (28254) from channel "stable"                            /25l
+Download snap "snapd" (28254) from channel "stable"            0%  918kB/s 51.0s
+Download snap "snapd" (28254) from channel "stable"            1% 1.39MB/s 33.4s
+Download snap "snapd" (28254) from channel "stable"            1% 1.55MB/s 29.9s
+Download snap "snapd" (28254) from channel "stable"            2% 2.56MB/s 17.9s
+Download snap "snapd" (28254) from channel "stable"            5% 4.09MB/s 10.9s
+Download snap "snapd" (28254) from channel "stable"            8% 5.72MB/s 7.56s
+Download snap "snapd" (28254) from channel "stable"           14% 9.16MB/s 4.38s
+Download snap "snapd" (28254) from channel "stable"           27% 15.1MB/s 2.26s
+Download snap "snapd" (28254) from channel "stable"           47% 22.8MB/s 1.09s
+Download snap "snapd" (28254) from channel "stable"           84% 36.6MB/s 200ms
+Fetch and check assertions for snap "snapd" (28254)                            -
+Fetch and check assertions for snap "snapd" (28254)                            \
+Fetch and check assertions for snap "snapd" (28254)                            |
+Fetch and check assertions for snap "snapd" (28254)                            /
+Fetch and check assertions for snap "snapd" (28254)                            -
+Fetch and check assertions for snap "snapd" (28254)                            \
+Fetch and check assertions for snap "snapd" (28254)                            |
+Fetch and check assertions for snap "snapd" (28254)                            /
+Mount snap "snapd" (28254)                                                     -
+Mount snap "snapd" (28254)                                                     \
+Mount snap "snapd" (28254)                                                     |
+Mount snap "snapd" (28254)                                                     /
+Process delayed security backend side effects for affected snaps               -
+Automatically connect eligible plugs and slots of snap "snapd"                 \
+2026-10-06T10:56:01Z INFO Waiting for automatic snapd restart...
 
-def get_google_chat_webhook():
-    return os.getenv("GOOGLE_CHAT_WEBHOOK")
+Automatically connect eligible plugs and slots of snap "snapd"                 |
+Automatically connect eligible plugs and slots of snap "snapd"                 /
+Automatically connect eligible plugs and slots of snap "snapd"                 -
+Automatically connect eligible plugs and slots of snap "snapd"                 \
+Automatically connect eligible plugs and slots of snap "snapd"                 |
+Automatically connect eligible plugs and slots of snap "snapd"                 /
+Automatically connect eligible plugs and slots of snap "snapd"                 -
+2026-10-06T10:56:02Z INFO Waiting for automatic snapd restart...
 
-def send_google_chat_notification(webhook_url, trailer, pbn, status_text):
-    """Sends a formatted notification to Google Chat when a unit clears."""
-    message = {
-        "text": (
-            f"🟢 *PBN CLEARANCE ALERT*\n\n"
-            f"🚛 *Trailer / Reg:* {trailer}\n"
-            f"📄 *PBN:* {pbn}\n"
-            f"📍 *Status:* *{status_text}*\n\n"
-            f"✅ Unit cleared and removed from active watchlist."
-        )
-    }
-    try:
-        res = requests.post(webhook_url, json=message, timeout=10)
-        res.raise_for_status()
-        print(f"Notification sent successfully for {trailer} ({pbn}).")
-    except Exception as e:
-        print(f"Failed to send Google Chat message: {e}")
+Automatically connect eligible plugs and slots of snap "snapd"                 \
+Automatically connect eligible plugs and slots of snap "snapd"                 |
+Automatically connect eligible plugs and slots of snap "snapd"                 /
+Fetch and check assertions for snap "core26" (462)                             /
+Fetch and check assertions for snap "core26" (462)                             -
+Fetch and check assertions for snap "core26" (462)                             \
+Fetch and check assertions for snap "core26" (462)                             |
+Fetch and check assertions for snap "core26" (462)                             /
+Fetch and check assertions for snap "core26" (462)                             -
+Download snap "mesa-2404" (1839) from channel "stable"        11% 34.8MB/s 10.8s
+Mount snap "core26" (462)                                                      \
+Mount snap "core26" (462)                                                      |
+Mount snap "core26" (462)                                                      /
+Mount snap "core26" (462)                                                      -
+Mount snap "core26" (462)                                                      \
+Mount snap "core26" (462)                                                      |
+Mount snap "core26" (462)                                                      /
+Mount snap "core26" (462)                                                      -
+Mount snap "core26" (462)                                                      \
+Download snap "mesa-2404" (1839) from channel "stable"        24% 39.4MB/s 8.13s
+Download snap "mesa-2404" (1839) from channel "stable"        27% 41.1MB/s 7.54s
+Download snap "mesa-2404" (1839) from channel "stable"        28% 29.7MB/s 10.2s
+Download snap "mesa-2404" (1839) from channel "stable"        31% 31.5MB/s 9.24s
+Download snap "mesa-2404" (1839) from channel "stable"        33% 33.1MB/s 8.49s
+Download snap "mesa-2404" (1839) from channel "stable"        36% 35.1MB/s 7.64s
+Download snap "mesa-2404" (1839) from channel "stable"        39% 36.5MB/s 7.03s
+Download snap "mesa-2404" (1839) from channel "stable"        42% 38.2MB/s 6.42s
+Download snap "mesa-2404" (1839) from channel "stable"        44% 39.4MB/s 5.96s
+Download snap "mesa-2404" (1839) from channel "stable"        46% 39.5MB/s 5.82s
+Download snap "mesa-2404" (1839) from channel "stable"        47% 39.6MB/s 5.65s
+Download snap "mesa-2404" (1839) from channel "stable"        48% 39.7MB/s 5.48s
+Download snap "mesa-2404" (1839) from channel "stable"        50% 39.9MB/s 5.31s
+Download snap "mesa-2404" (1839) from channel "stable"        51% 39.9MB/s 5.18s
+Download snap "mesa-2404" (1839) from channel "stable"        52% 39.4MB/s 5.19s
+Download snap "mesa-2404" (1839) from channel "stable"        52% 38.8MB/s 5.18s
+Download snap "mesa-2404" (1839) from channel "stable"        53% 38.5MB/s 5.13s
+Download snap "mesa-2404" (1839) from channel "stable"        54% 34.9MB/s 5.53s
+Download snap "mesa-2404" (1839) from channel "stable"        54% 34.3MB/s 5.61s
+Download snap "mesa-2404" (1839) from channel "stable"        56% 34.5MB/s 5.41s
+Download snap "mesa-2404" (1839) from channel "stable"        58% 34.9MB/s 5.13s
+Download snap "mesa-2404" (1839) from channel "stable"        59% 34.7MB/s 5.02s
+Download snap "mesa-2404" (1839) from channel "stable"        60% 34.7MB/s 4.90s
+Download snap "mesa-2404" (1839) from channel "stable"        61% 35.1MB/s 4.64s
+Download snap "mesa-2404" (1839) from channel "stable"        63% 35.5MB/s 4.36s
+Download snap "mesa-2404" (1839) from channel "stable"        65% 36.0MB/s 4.10s
+Download snap "mesa-2404" (1839) from channel "stable"        67% 35.4MB/s 3.95s
+Download snap "mesa-2404" (1839) from channel "stable"        70% 36.4MB/s 3.49s
+Download snap "mesa-2404" (1839) from channel "stable"        72% 37.2MB/s 3.12s
+Download snap "mesa-2404" (1839) from channel "stable"        75% 37.9MB/s 2.79s
+Download snap "mesa-2404" (1839) from channel "stable"        77% 38.4MB/s 2.53s
+Download snap "mesa-2404" (1839) from channel "stable"        79% 39.1MB/s 2.23s
+Download snap "mesa-2404" (1839) from channel "stable"        82% 40.0MB/s 1.88s
+Download snap "mesa-2404" (1839) from channel "stable"        85% 41.0MB/s 1.53s
+Download snap "mesa-2404" (1839) from channel "stable"        87% 41.2MB/s 1.35s
+Download snap "mesa-2404" (1839) from channel "stable"        90% 41.9MB/s 1.05s
+Download snap "mesa-2404" (1839) from channel "stable"        92% 42.4MB/s 814ms
+Download snap "mesa-2404" (1839) from channel "stable"        94% 42.7MB/s 629ms
+Download snap "mesa-2404" (1839) from channel "stable"        96% 43.3MB/s 366ms
+Download snap "mesa-2404" (1839) from channel "stable"        99% 43.9MB/s 110ms
+Download snap "mesa-2404" (1839) from channel "stable"       100% 40.2MB/s 0.0ns
+Download snap "mesa-2404" (1839) from channel "stable"       100% 36.8MB/s 0.0ns
+Fetch and check assertions for snap "mesa-2404" (1839)                         |
+Fetch and check assertions for snap "mesa-2404" (1839)                         /
+Setup snap "cups" (1262) security profiles                                     -
+Setup snap "cups" (1262) security profiles                                     \
+Setup snap "cups" (1262) security profiles                                     |
+Setup snap "cups" (1262) security profiles                                     /
+Setup snap "cups" (1262) security profiles                                     -
+Setup snap "cups" (1262) security profiles                                     \
+Setup snap "cups" (1262) security profiles                                     |
+Setup snap "cups" (1262) security profiles                                     /
+Setup snap "cups" (1262) security profiles                                     -
+Setup snap "cups" (1262) security profiles                                     \
+Setup snap "cups" (1262) security profiles                                     |
+Setup snap "cups" (1262) security profiles                                     /
+Setup snap "cups" (1262) security profiles                                     -
+Setup snap "cups" (1262) security profiles                                     \
+Setup snap "cups" (1262) security profiles                                     |
+Setup snap "cups" (1262) security profiles                                     /
+Setup snap "cups" (1262) security profiles                                     -
+Setup snap "cups" (1262) security profiles                                     \
+Setup snap "cups" (1262) security profiles                                     |
+Setup snap "cups" (1262) security profiles                                     /
+Setup snap "cups" (1262) security profiles                                     -
+Setup snap "cups" (1262) security profiles                                     \
+Setup snap "cups" (1262) security profiles                                     |
+Setup snap "cups" (1262) security profiles                                     /
+Setup snap "cups" (1262) security profiles                                     -
+Setup snap "cups" (1262) security profiles                                     \
+Setup snap "cups" (1262) security profiles                                     |
+Setup snap "cups" (1262) security profiles                                     /
+Setup snap "cups" (1262) security profiles                                     -
+Setup snap "cups" (1262) security profiles                                     \
+Setup snap "cups" (1262) security profiles                                     |
+Setup snap "cups" (1262) security profiles                                     /
+Setup snap "cups" (1262) security profiles                                     -
+Setup snap "cups" (1262) security profiles                                     \
+Setup snap "cups" (1262) security profiles                                     |
+Setup snap "cups" (1262) security profiles                                     /
+Setup snap "cups" (1262) security profiles                                     -
+Setup snap "cups" (1262) security profiles                                     \
+Setup snap "cups" (1262) security profiles                                     |
+Setup snap "cups" (1262) security profiles                                     /
+Setup snap "cups" (1262) security profiles                                     -
+Setup snap "cups" (1262) security profiles                                     \
+Setup snap "cups" (1262) security profiles                                     |25l
+Make snap "mesa-2404" (1839) available to the system                           /
+Setup snap "mesa-2404" (1839) security profiles                                -
+Setup snap "mesa-2404" (1839) security profiles                                \
+Setup snap "mesa-2404" (1839) security profiles                                |
+Setup snap "mesa-2404" (1839) security profiles                                /
+Setup snap "mesa-2404" (1839) security profiles                                -
+Setup snap "mesa-2404" (1839) security profiles                                \
+Setup snap "mesa-2404" (1839) security profiles                                |
+Setup snap "mesa-2404" (1839) security profiles                                /
+Setup snap "mesa-2404" (1839) security profiles                                -
+Setup snap "mesa-2404" (1839) security profiles                                \
+Setup snap "mesa-2404" (1839) security profiles                                |
+Setup snap "mesa-2404" (1839) security profiles                                /
+Setup snap "mesa-2404" (1839) security profiles                                -
+Setup snap "mesa-2404" (1839) security profiles                                \
+Download snap "gnome-46-2404" (168) from channel "stable"     69%  200MB/s 1.01s
+Run install hook of "mesa-2404" snap if present                                |
+Run install hook of "mesa-2404" snap if present                                /
+Run install hook of "mesa-2404" snap if present                                -
+Run install hook of "mesa-2404" snap if present                                \
+Run install hook of "mesa-2404" snap if present                                |
+Run install hook of "mesa-2404" snap if present                                /
+Run install hook of "mesa-2404" snap if present                                -
+Run install hook of "mesa-2404" snap if present                                \
+Run install hook of "mesa-2404" snap if present                                |
+Run install hook of "mesa-2404" snap if present                                /
+Run install hook of "mesa-2404" snap if present                                -
+Run install hook of "mesa-2404" snap if present                                \
+Run install hook of "mesa-2404" snap if present                                |
+Run install hook of "mesa-2404" snap if present                                /
+Run install hook of "mesa-2404" snap if present                                -
+Start snap "mesa-2404" (1839) services                                         \
+Download snap "gnome-46-2404" (168) from channel "stable"     89%  126MB/s 583ms
+Download snap "gnome-46-2404" (168) from channel "stable"     92%  127MB/s 423ms
+Download snap "gnome-46-2404" (168) from channel "stable"     93%  126MB/s 354ms
+Download snap "gnome-46-2404" (168) from channel "stable"     95%  125MB/s 272ms
+Download snap "gnome-46-2404" (168) from channel "stable"     97%  125MB/s 168ms
+Download snap "gnome-46-2404" (168) from channel "stable"     99%  125MB/s  64ms
+Download snap "gnome-46-2404" (168) from channel "stable"    100%  124MB/s 0.0ns
+Download snap "gnome-46-2404" (168) from channel "stable"    100%  122MB/s 0.0ns
+Download snap "gnome-46-2404" (168) from channel "stable"    100% 83.8MB/s 0.0ns
+Fetch and check assertions for snap "gnome-46-2404" (168)                      |
+Fetch and check assertions for snap "gnome-46-2404" (168)                      /
+Fetch and check assertions for snap "gnome-46-2404" (168)                      -
+Fetch and check assertions for snap "gnome-46-2404" (168)                      \
+Fetch and check assertions for snap "gnome-46-2404" (168)                      |
+Fetch and check assertions for snap "gnome-46-2404" (168)                      /
+Fetch and check assertions for snap "gnome-46-2404" (168)                      -
+Mount snap "gnome-46-2404" (168)                                               \
+Mount snap "gnome-46-2404" (168)                                               |
+Mount snap "gnome-46-2404" (168)                                               /
+Mount snap "gnome-46-2404" (168)                                               -
+Mount snap "gnome-46-2404" (168)                                               \
+Copy snap "gnome-46-2404" data                                                 |
+Automatically connect eligible plugs and slots of snap "chromium"              /
+Automatically connect eligible plugs and slots of snap "chromium"              -
+Automatically connect eligible plugs and slots of snap "chromium"              \
+Automatically connect eligible plugs and slots of snap "chromium"              |
+Automatically connect eligible plugs and slots of snap "chromium"              /
+Automatically connect eligible plugs and slots of snap "chromium"              -
+Automatically connect eligible plugs and slots of snap "chromium"              \
+Automatically connect eligible plugs and slots of snap "chromium"              |
+Automatically connect eligible plugs and slots of snap "chromium"              /
+Automatically connect eligible plugs and slots of snap "chromium"              -
+Automatically connect eligible plugs and slots of snap "chromium"              \
+Automatically connect eligible plugs and slots of snap "chromium"              |
+Automatically connect eligible plugs and slots of snap "chromium"              /
+Automatically connect eligible plugs and slots of snap "chromium"              -
+Automatically connect eligible plugs and slots of snap "chromium"              \
+Automatically connect eligible plugs and slots of snap "chromium"              |
+Automatically connect eligible plugs and slots of snap "chromium"              /
+Automatically connect eligible plugs and slots of snap "chromium"              -
+Automatically connect eligible plugs and slots of snap "chromium"              \
+Automatically connect eligible plugs and slots of snap "chromium"              |
+Automatically connect eligible plugs and slots of snap "chromium"              /
+Automatically connect eligible plugs and slots of snap "chromium"              -
+Automatically connect eligible plugs and slots of snap "chromium"              \
+Automatically connect eligible plugs and slots of snap "chromium"              |
+Automatically connect eligible plugs and slots of snap "chromium"              /
+Automatically connect eligible plugs and slots of snap "chromium"              -
+Automatically connect eligible plugs and slots of snap "chromium"              \
+Automatically connect eligible plugs and slots of snap "chromium"              |
+Automatically connect eligible plugs and slots of snap "chromium"              /
+Automatically connect eligible plugs and slots of snap "chromium"              -
+Automatically connect eligible plugs and slots of snap "chromium"              \
+Automatically connect eligible plugs and slots of snap "chromium"              |
+Automatically connect eligible plugs and slots of snap "chromium"              /
+Automatically connect eligible plugs and slots of snap "chromium"              -
+Automatically connect eligible plugs and slots of snap "chromium"              \
+Automatically connect eligible plugs and slots of snap "chromium"              |
+Automatically connect eligible plugs and slots of snap "chromium"              /
+Automatically connect eligible plugs and slots of snap "chromium"              -
+Automatically connect eligible plugs and slots of snap "chromium"              \
+Automatically connect eligible plugs and slots of snap "chromium"              |
+Automatically connect eligible plugs and slots of snap "chromium"              /
+Automatically connect eligible plugs and slots of snap "chromium"              -
+Automatically connect eligible plugs and slots of snap "chromium"              \
+Automatically connect eligible plugs and slots of snap "chromium"              |
+Automatically connect eligible plugs and slots of snap "chromium"              /
+Automatically connect eligible plugs and slots of snap "chromium"              -
+Automatically connect eligible plugs and slots of snap "chromium"              \
+Automatically connect eligible plugs and slots of snap "chromium"              |
+Automatically connect eligible plugs and slots of snap "chromium"              /
+Automatically connect eligible plugs and slots of snap "chromium"              -
+Automatically connect eligible plugs and slots of snap "chromium"              \
+Automatically connect eligible plugs and slots of snap "chromium"              |
+Automatically connect eligible plugs and slots of snap "chromium"              /
+Automatically connect eligible plugs and slots of snap "chromium"              -
+Automatically connect eligible plugs and slots of snap "chromium"              \
+Automatically connect eligible plugs and slots of snap "chromium"              |
+Automatically connect eligible plugs and slots of snap "chromium"              /
+Automatically connect eligible plugs and slots of snap "chromium"              -
+Automatically connect eligible plugs and slots of snap "chromium"              \
+Automatically connect eligible plugs and slots of snap "chromium"              |
+Automatically connect eligible plugs and slots of snap "chromium"              /
+Automatically connect eligible plugs and slots of snap "chromium"              -
+Process delayed security backend side effects for affected snaps               \
+Process delayed security backend side effects for affected snaps               |
+Process delayed security backend side effects for affected snaps               /
+Connect chromium:icon-themes to gtk-common-themes:icon-themes                  -
+Process delayed security backend side effects for affected snaps               \
+Setup snap "chromium" (3548) security profiles                                 |
+Setup snap "chromium" (3548) security profiles                                 /
+Setup snap "chromium" (3548) security profiles                                 -
+Setup snap "chromium" (3548) security profiles                                 \
+Setup snap "chromium" (3548) security profiles                                 |
+Setup snap "chromium" (3548) security profiles                                 /
+Setup snap "chromium" (3548) security profiles                                 -
+Setup snap "chromium" (3548) security profiles                                 \
+Setup snap "chromium" (3548) security profiles                                 |
+Setup snap "chromium" (3548) security profiles                                 /
+Setup snap "chromium" (3548) security profiles                                 -
+Setup snap "chromium" (3548) security profiles                                 \
+Setup snap "chromium" (3548) security profiles                                 |
+Setup snap "chromium" (3548) security profiles                                 /
+Setup snap "chromium" (3548) security profiles                                 -
+Setup snap "chromium" (3548) security profiles                                 \
+Setup snap "chromium" (3548) security profiles                                 |
+Setup snap "chromium" (3548) security profiles                                 /
+Setup snap "chromium" (3548) security profiles                                 -
+Setup snap "chromium" (3548) security profiles                                 \
+Setup snap "chromium" (3548) security profiles                                 |
+Setup snap "chromium" (3548) security profiles                                 /
+Setup snap "chromium" (3548) security profiles                                 -
+Setup snap "chromium" (3548) security profiles                                 \
+Setup snap "chromium" (3548) security profiles                                 |
+Setup snap "chromium" (3548) security profiles                                 /
+Setup snap "chromium" (3548) security profiles                                 -
+Setup snap "chromium" (3548) security profiles                                 \
+Setup snap "chromium" (3548) security profiles                                 |
+Setup snap "chromium" (3548) security profiles                                 /
+Setup snap "chromium" (3548) security profiles                                 -
+Setup snap "chromium" (3548) security profiles                                 \
+Start snap "chromium" (3548) services                                          |
+Run configure hook of "chromium" snap if present                               /
+Run configure hook of "chromium" snap if present                               -
+Run configure hook of "chromium" snap if present                               \
+Run configure hook of "chromium" snap if present                               |
+Process delayed security backend side effects for affected snaps               /
+Run service command "stop" for services ["daemon"] of snap "chromium"          -
+Run service command "stop" for services ["daemon"] of snap "chromium"          \
+Process delayed security backend side effects for affected snaps               |
+25hchromium 154.0.8037.57 from Canonical✓ installed
+=> Snap installation complete
+Unpacking chromium-browser (2:1snap1-0ubuntu2) ...
+Selecting previously unselected package chromium-chromedriver.
+Preparing to unpack .../chromium-chromedriver_2%3a1snap1-0ubuntu2_amd64.deb ...
+Unpacking chromium-chromedriver (2:1snap1-0ubuntu2) ...
+Setting up chromium-browser (2:1snap1-0ubuntu2) ...
+Setting up chromium-chromedriver (2:1snap1-0ubuntu2) ...
+Processing triggers for hicolor-icon-theme (0.17-2) ...
 
-def check_pbn_status(driver, pbn_id):
-    """Queries ROS portal using Selenium and returns inner text of status element."""
-    driver.get(ROS_URL)
-    
-    # Wait for input field
-    input_box = WebDriverWait(driver, 15).until(
-        EC.presence_of_element_located((By.ID, "pbn"))
-    )
-    input_box.clear()
-    input_box.send_keys(pbn_id)
-    
-    submit_btn = driver.find_element(By.ID, "submitPbn")
-    submit_btn.click()
-    
-    # Wait for status response container
-    WebDriverWait(driver, 15).until(
-        EC.presence_of_element_located((By.TAG_NAME, "body"))
-    )
-    time.sleep(2) # Brief delay for Angular bindings
-    
-    return driver.find_element(By.TAG_NAME, "body").text
+Running kernel seems to be up-to-date.
 
-def main():
-    webhook_url = get_google_chat_webhook()
-    if not webhook_url:
-        print("WARNING: GOOGLE_CHAT_WEBHOOK environment variable is not set!")
-    
-    if not os.path.exists("watchlist.json"):
-        print("watchlist.json not found. Exiting.")
-        return
+No services need to be restarted.
 
-    with open("watchlist.json", "r") as f:
-        watchlist = json.load(f)
+No containers need to be restarted.
 
-    if not watchlist:
-        print("Watchlist is empty. Nothing to check.")
-        return
+No user sessions are running outdated binaries.
 
-    # Configure Headless Chrome
-    options = webdriver.ChromeOptions()
-    options.add_argument("--headless=new")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-gpu")
-    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+No VM guests are running outdated hypervisor (qemu) binaries on this host.
+Collecting selenium
+  Downloading selenium-4.50.0-py3-none-any.whl.metadata (7.4 kB)
+Collecting requests
+  Downloading requests-2.34.2-py3-none-any.whl.metadata (4.8 kB)
+Collecting certifi>=2026.2.25 (from selenium)
+  Downloading certifi-2026.7.22-py3-none-any.whl.metadata (2.5 kB)
+Collecting trio<1.0,>=0.31.0 (from selenium)
+  Downloading trio-0.34.0-py3-none-any.whl.metadata (8.5 kB)
+Collecting trio-websocket<1.0,>=0.12.2 (from selenium)
+  Downloading trio_websocket-0.12.2-py3-none-any.whl.metadata (5.1 kB)
+Collecting typing_extensions<5.0,>=4.15.0 (from selenium)
+  Downloading typing_extensions-4.16.0-py3-none-any.whl.metadata (3.3 kB)
+Collecting urllib3<3.0,>=2.6.3 (from urllib3[socks]<3.0,>=2.6.3->selenium)
+  Downloading urllib3-2.8.0-py3-none-any.whl.metadata (7.4 kB)
+Collecting websocket-client<2.0,>=1.8.0 (from selenium)
+  Downloading websocket_client-1.9.2-py3-none-any.whl.metadata (8.3 kB)
+Collecting attrs>=23.2.0 (from trio<1.0,>=0.31.0->selenium)
+  Downloading attrs-26.1.0-py3-none-any.whl.metadata (8.8 kB)
+Collecting sortedcontainers (from trio<1.0,>=0.31.0->selenium)
+  Downloading sortedcontainers-2.4.0-py2.py3-none-any.whl.metadata (10 kB)
+Collecting idna (from trio<1.0,>=0.31.0->selenium)
+  Downloading idna-3.20-py3-none-any.whl.metadata (7.2 kB)
+Collecting outcome (from trio<1.0,>=0.31.0->selenium)
+  Downloading outcome-1.3.0.post0-py2.py3-none-any.whl.metadata (2.6 kB)
+Collecting sniffio>=1.3.0 (from trio<1.0,>=0.31.0->selenium)
+  Downloading sniffio-1.3.1-py3-none-any.whl.metadata (3.9 kB)
+Collecting exceptiongroup (from trio<1.0,>=0.31.0->selenium)
+  Downloading exceptiongroup-1.3.1-py3-none-any.whl.metadata (6.7 kB)
+Collecting wsproto>=0.14 (from trio-websocket<1.0,>=0.12.2->selenium)
+  Downloading wsproto-1.3.2-py3-none-any.whl.metadata (5.2 kB)
+Collecting pysocks!=1.5.7,<2.0,>=1.5.6 (from urllib3[socks]<3.0,>=2.6.3->selenium)
+  Downloading PySocks-1.7.1-py3-none-any.whl.metadata (13 kB)
+Collecting charset_normalizer<4,>=2 (from requests)
+  Downloading charset_normalizer-3.5.2-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (46 kB)
+Collecting h11<1,>=0.16.0 (from wsproto>=0.14->trio-websocket<1.0,>=0.12.2->selenium)
+  Downloading h11-0.16.0-py3-none-any.whl.metadata (8.3 kB)
+Downloading selenium-4.50.0-py3-none-any.whl (12.1 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 12.1/12.1 MB 226.3 MB/s  0:00:00
+Downloading trio-0.34.0-py3-none-any.whl (511 kB)
+Downloading trio_websocket-0.12.2-py3-none-any.whl (21 kB)
+Downloading typing_extensions-4.16.0-py3-none-any.whl (45 kB)
+Downloading urllib3-2.8.0-py3-none-any.whl (135 kB)
+Downloading PySocks-1.7.1-py3-none-any.whl (16 kB)
+Downloading websocket_client-1.9.2-py3-none-any.whl (95 kB)
+Downloading requests-2.34.2-py3-none-any.whl (73 kB)
+Downloading charset_normalizer-3.5.2-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (271 kB)
+Downloading idna-3.20-py3-none-any.whl (69 kB)
+Downloading attrs-26.1.0-py3-none-any.whl (67 kB)
+Downloading certifi-2026.7.22-py3-none-any.whl (136 kB)
+Downloading outcome-1.3.0.post0-py2.py3-none-any.whl (10 kB)
+Downloading sniffio-1.3.1-py3-none-any.whl (10 kB)
+Downloading wsproto-1.3.2-py3-none-any.whl (24 kB)
+Downloading h11-0.16.0-py3-none-any.whl (37 kB)
+Downloading exceptiongroup-1.3.1-py3-none-any.whl (16 kB)
+Downloading sortedcontainers-2.4.0-py2.py3-none-any.whl (29 kB)
+Installing collected packages: sortedcontainers, websocket-client, urllib3, typing_extensions, sniffio, pysocks, idna, h11, charset_normalizer, certifi, attrs, wsproto, requests, outcome, exceptiongroup, trio, trio-websocket, selenium
 
-    driver = None
-    remaining_watchlist = []
+Successfully installed attrs-26.1.0 certifi-2026.7.22 charset_normalizer-3.5.2 exceptiongroup-1.3.1 h11-0.16.0 idna-3.20 outcome-1.3.0.post0 pysocks-1.7.1 requests-2.34.2 selenium-4.50.0 sniffio-1.3.1 sortedcontainers-2.4.0 trio-0.34.0 trio-websocket-0.12.2 typing_extensions-4.16.0 urllib3-2.8.0 websocket-client-1.9.2 wsproto-1.3.2
+6s
+Run python watcher.py
+Fatal Chrome error: Message: session not created
+from unknown error: no chrome binary at /opt/google/chrome/chrome; For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#sessionnotcreatedexception
+Stacktrace:
+#0 0x55dd382f0d0a <unknown>
+#1 0x55dd38360869 <unknown>
+#2 0x55dd3839b190 <unknown>
+#3 0x55dd38399f13 <unknown>
+#4 0x55dd383e7576 <unknown>
+#5 0x55dd383e6cac <unknown>
+#6 0x55dd383a7666 <unknown>
+#7 0x55dd383a82b1 <unknown>
+#8 0x55dd37f1624e <unknown>
+#9 0x55dd37f168d1 <unknown>
+#10 0x55dd388145aa <unknown>
+#11 0x55dd380eba03 <unknown>
+#12 0x55dd382297f1 <unknown>
+#13 0x55dd38229748 <unknown>
+#14 0x55dd3882c9a2 <unknown>
+#15 0x55dd38833037 <unknown>
+#16 0x7f4f9b478b84 <unknown>
+#17 0x7f4f9b505ecc <unknown>
 
-    try:
-        driver = webdriver.Chrome(options=options)
-        driver.set_page_load_timeout(20)
-        driver.implicitly_wait(10)
-
-        for item in watchlist:
-            pbn = item.get("pbn")
-            trailer = item.get("trailer", "Unknown")
-
-            try:
-                print(f"Checking status for Trailer: {trailer} | PBN: {pbn}...")
-                page_text = check_pbn_status(driver, pbn)
-                text_upper = page_text.upper()
-
-                if "EXIT THE PORT" in text_upper or "EXIT PORT" in text_upper:
-                    print(f"✅ CLEARANCE DETECTED for {trailer} ({pbn})!")
-                    if webhook_url:
-                        send_google_chat_notification(webhook_url, trailer, pbn, "Exit the Port")
-                    else:
-                        print("Cleared status detected, but webhook URL is missing.")
-                else:
-                    print(f"⏳ Still pending or called for {trailer} ({pbn}).")
-                    remaining_watchlist.append(item)
-
-            except Exception as err:
-                print(f"❌ Error checking PBN {pbn}: {err}")
-                remaining_watchlist.append(item)
-
-    except Exception as fatal_err:
-        print(f"Fatal Chrome error: {fatal_err}")
-        remaining_watchlist = watchlist
-
-    finally:
-        if driver:
-            driver.quit()
-
-    # Save updated watchlist
-    with open("watchlist.json", "w") as f:
-        json.dump(remaining_watchlist, f, indent=2)
-
-if __name__ == "__main__":
-    main()
+0s
+Run stefanzweifel/git-auto-commit-action@v5
+Started: bash /home/runner/work/_actions/stefanzweifel/git-auto-commit-action/v5/entrypoint.sh
+INPUT_REPOSITORY value: .
+INPUT_STATUS_OPTIONS: 
+INPUT_FILE_PATTERN: watchlist.json
+Working tree clean. Nothing to commit.
+0s
+Post job cleanup.
+(node:5435) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+1s
+Post job cleanup.
+/usr/bin/git version
+git version 2.55.0
+Temporarily overriding HOME='/home/runner/work/_temp/50e3d2a8-0200-4523-b3a4-81f4a2a953a0' before making global git config changes
+Adding repository directory to the temporary git global config as a safe directory
+/usr/bin/git config --global --add safe.directory /home/runner/work/pbn-checker/pbn-checker
+/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+http.https://github.com/.extraheader
+/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+0s
+Cleaning up orphan processes
+Warning: Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-python@v5, stefanzweifel/git-auto-commit-action@v5. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
