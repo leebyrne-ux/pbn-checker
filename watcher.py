@@ -1,8 +1,6 @@
 import os
 import json
-import time
 import traceback
-import shutil
 import requests
 
 from selenium import webdriver
@@ -48,14 +46,12 @@ def create_driver():
 
     options = Options()
 
-    # GitHub Actions / Linux settings
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
     options.add_argument("--window-size=1920,1080")
 
-    # Try to locate Chromium automatically.
     chromium_paths = [
         "/usr/bin/chromium",
         "/usr/bin/chromium-browser",
@@ -79,7 +75,6 @@ def create_driver():
     print("Starting Chromium...")
 
     driver = webdriver.Chrome(options=options)
-
     driver.set_page_load_timeout(60)
 
     return driver
@@ -89,9 +84,38 @@ def get_page_text(driver):
     """Return all visible page text."""
 
     try:
-        return driver.find_element(By.TAG_NAME, "body").text.upper()
+        return driver.find_element(
+            By.TAG_NAME,
+            "body"
+        ).text.upper()
+
     except Exception:
         return ""
+
+
+def is_cleared(page_text):
+    """
+    Determine whether ROS reports that the unit can exit the port.
+    """
+
+    if not page_text:
+        print("CLEARANCE MATCH: FALSE - no page text")
+        return False
+
+    # Normalise whitespace and capitalisation.
+    text = " ".join(page_text.upper().split())
+
+    print("Checking ROS result for clearance...")
+
+    if "EXIT THE PORT" in text:
+        print("CLEARANCE MATCH: TRUE")
+        print("ROS status detected: EXIT THE PORT")
+        return True
+
+    print("CLEARANCE MATCH: FALSE")
+    print("ROS status did not contain EXIT THE PORT")
+
+    return False
 
 
 def check_pbn_status(driver, pbn):
@@ -114,7 +138,7 @@ def check_pbn_status(driver, pbn):
 
         print("ROS page loaded.")
 
-        # Find a visible text input.
+        # Find the visible PBN input.
         input_element = wait.until(
             EC.presence_of_element_located(
                 (
@@ -133,7 +157,7 @@ def check_pbn_status(driver, pbn):
 
         print(f"Entered PBN: {pbn}")
 
-        # Look for a button containing "check status".
+        # Find the Check Status button.
         button = wait.until(
             EC.element_to_be_clickable(
                 (
@@ -156,10 +180,32 @@ def check_pbn_status(driver, pbn):
 
         print("Check Status clicked.")
 
-        # Give the ROS page time to process the request.
-        time.sleep(5)
+        # Wait for the ROS result.
+        #
+        # We first wait for the page body to contain either the
+        # clearance result or at least enough content to indicate
+        # that the result has loaded.
+        try:
+            WebDriverWait(driver, 30).until(
+                lambda d: (
+                    "EXIT THE PORT" in
+                    d.find_element(
+                        By.TAG_NAME,
+                        "body"
+                    ).text.upper()
+                )
+            )
 
-        # Get the resulting page text.
+            print("ROS clearance result detected.")
+
+        except Exception:
+            print(
+                "EXIT THE PORT was not detected within 30 seconds."
+            )
+
+            # The page may still contain a valid non-clearance
+            # result, so continue and inspect the page text.
+
         page_text = get_page_text(driver)
 
         print("")
@@ -171,91 +217,99 @@ def check_pbn_status(driver, pbn):
         return page_text, driver
 
     except Exception as e:
+
         print("")
         print(f"ERROR checking PBN {pbn}")
         print(str(e))
         traceback.print_exc()
 
-        # Save diagnostic information if possible.
+        # Save diagnostic information.
         try:
-            screenshot_name = (
-                f"error_{pbn.replace('/', '_')}.png"
-            )
+            safe_pbn = str(pbn).replace("/", "_")
 
-            html_name = (
-                f"error_{pbn.replace('/', '_')}.html"
-            )
+            screenshot_name = f"error_{safe_pbn}.png"
+            html_name = f"error_{safe_pbn}.html"
 
             driver.save_screenshot(screenshot_name)
 
-            with open(html_name, "w", encoding="utf-8") as f:
+            with open(
+                html_name,
+                "w",
+                encoding="utf-8"
+            ) as f:
                 f.write(driver.page_source)
 
-            print(f"Saved diagnostic screenshot: {screenshot_name}")
-            print(f"Saved diagnostic HTML: {html_name}")
-
-        except Exception as debug_error:
             print(
-                f"Could not save diagnostic files: {debug_error}"
+                f"Saved diagnostic screenshot: "
+                f"{screenshot_name}"
             )
 
-        # Keep the PBN on the watchlist if checking failed.
+            print(
+                f"Saved diagnostic HTML: "
+                f"{html_name}"
+            )
+
+        except Exception as debug_error:
+
+            print(
+                f"Could not save diagnostic files: "
+                f"{debug_error}"
+            )
+
+        # Returning None tells main() that the check failed.
         return None, driver
-
-
-def is_cleared(page_text):
-    """
-    Determine whether ROS reports that the unit has cleared.
-
-    We deliberately use the specific phrase rather than simply
-    checking for the word EXIT.
-    """
-
-    if not page_text:
-        return False
-
-    text = page_text.upper()
-
-    return "EXIT THE PORT" in text
 
 
 def load_watchlist():
     """Load watchlist.json."""
 
     if not os.path.exists(WATCHLIST_FILE):
+
         print("watchlist.json not found.")
         return []
 
     try:
+
         with open(
             WATCHLIST_FILE,
             "r",
             encoding="utf-8"
         ) as f:
+
             data = json.load(f)
 
         if not isinstance(data, list):
-            print("watchlist.json does not contain a list.")
+
+            print(
+                "watchlist.json does not contain a list."
+            )
+
             return []
 
         return data
 
     except Exception as e:
-        print(f"Could not read watchlist.json: {e}")
+
+        print(
+            f"Could not read watchlist.json: {e}"
+        )
+
         return []
 
 
 def save_watchlist(watchlist):
-    """Save the remaining watchlist."""
+    """Save the remaining watchlist safely."""
 
     temporary_file = WATCHLIST_FILE + ".tmp"
 
     try:
+
         with open(
             temporary_file,
             "w",
             encoding="utf-8"
         ) as f:
+
             json.dump(
                 watchlist,
                 f,
@@ -271,11 +325,16 @@ def save_watchlist(watchlist):
         print("watchlist.json updated.")
 
     except Exception as e:
-        print(f"Could not save watchlist.json: {e}")
+
+        print(
+            f"Could not save watchlist.json: {e}"
+        )
 
         if os.path.exists(temporary_file):
+
             try:
                 os.remove(temporary_file)
+
             except Exception:
                 pass
 
@@ -290,25 +349,31 @@ def main():
     watchlist = load_watchlist()
 
     if not watchlist:
+
         print("Watchlist is empty.")
         return
 
-    print(f"Loaded {len(watchlist)} watchlist item(s).")
+    print(
+        f"Loaded {len(watchlist)} "
+        f"watchlist item(s)."
+    )
 
     driver = None
 
     remaining_items = []
 
     try:
+
         driver = create_driver()
 
         for item in watchlist:
 
-            # Support either:
-            # {"pbn": "...", "trailer": "..."}
-            # or
-            # {"PBN": "...", "trailer": "..."}
-            # and similar common variations.
+            # Support the expected watchlist format:
+            #
+            # {
+            #   "pbn": "RX23VN92",
+            #   "trailer": "GTC415"
+            # }
 
             pbn = (
                 item.get("pbn")
@@ -328,6 +393,7 @@ def main():
             )
 
             if not pbn:
+
                 print(
                     f"Skipping item with no PBN: {item}"
                 )
@@ -340,18 +406,26 @@ def main():
                 str(pbn)
             )
 
-            # If the check failed, keep the item.
+            # If the check failed, keep the PBN.
             if page_text is None:
+
+                print(
+                    f"Check failed for {pbn}. "
+                    "Keeping it on the watchlist."
+                )
+
                 remaining_items.append(item)
                 continue
 
-            # Check whether ROS reports clearance.
+            # Check whether ROS says EXIT THE PORT.
             if is_cleared(page_text):
 
                 print("")
+                print("=" * 60)
                 print("🟢 CLEARANCE DETECTED")
                 print(f"Trailer: {trailer}")
                 print(f"PBN: {pbn}")
+                print("=" * 60)
 
                 message = (
                     "🟢 PBN CLEARANCE ALERT\n\n"
@@ -364,8 +438,16 @@ def main():
 
                 send_google_chat(message)
 
-                # Do NOT add it back to remaining_items.
-                # This removes it from the active watchlist.
+                print(
+                    f"Removing {pbn} from watchlist."
+                )
+
+                # IMPORTANT:
+                # We deliberately do NOT append this item
+                # to remaining_items.
+                #
+                # Therefore it will be removed from
+                # watchlist.json.
 
             else:
 
@@ -374,18 +456,20 @@ def main():
                 print(f"Trailer: {trailer}")
                 print(f"PBN: {pbn}")
 
-                # Keep it for the next run.
+                # Keep the PBN for the next run.
                 remaining_items.append(item)
 
     except Exception as e:
 
         print("")
+        print("=" * 60)
         print("FATAL ERROR")
+        print("=" * 60)
         print(str(e))
         traceback.print_exc()
 
-        # If something goes wrong outside an individual check,
-        # preserve the original watchlist.
+        # If something unexpected happens outside an individual
+        # PBN check, preserve the original watchlist.
         remaining_items = watchlist
 
     finally:
@@ -395,6 +479,7 @@ def main():
             try:
                 driver.quit()
                 print("Browser closed.")
+
             except Exception:
                 pass
 
@@ -404,8 +489,15 @@ def main():
     print("=" * 60)
     print("PBN WATCHER FINISHED")
     print("=" * 60)
-    print(f"Items originally checked: {len(watchlist)}")
-    print(f"Items remaining: {len(remaining_items)}")
+    print(
+        f"Items originally checked: "
+        f"{len(watchlist)}"
+    )
+    print(
+        f"Items remaining: "
+        f"{len(remaining_items)}"
+    )
+    print("=" * 60)
     print("")
 
 
