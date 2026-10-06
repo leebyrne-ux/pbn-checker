@@ -4,11 +4,7 @@ import streamlit as st
 from datetime import datetime
 from github import Github
 
-st.set_page_config(
-    page_title="PBN Checker",
-    page_icon="🚚",
-    layout="centered"
-)
+st.set_page_config(page_title="PBN Checker", page_icon="🚚", layout="centered")
 
 FILE = "watchlist.json"
 
@@ -62,19 +58,14 @@ def save_data(data):
             st.error(f"Sync error: {e}")
 
 st.title("Customs PBN Batch Checker")
-now = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-st.caption(f"Time: {now}")
+st.caption(f"Time: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
 
 items = load_data()
 
 st.subheader("Add PBNs to Watchlist")
 
 with st.form("add_form", clear_on_submit=True):
-    txt = st.text_area(
-        "Paste PBNs and Trailers",
-        placeholder="RX23VN92\nGTC415 RX23VN92\nGTC372, ER47AF49",
-        height=120
-    )
+    txt = st.text_area("Paste PBNs and Trailers", placeholder="RX23VN92\nGTC415 RX23VN92", height=120)
     btn = st.form_submit_button("Add to Watchlist")
 
 if btn and txt.strip():
@@ -84,4 +75,43 @@ if btn and txt.strip():
     
     for line in txt.strip().split("\n"):
         parts = line.replace(",", " ").split()
-        if
+        if len(parts) == 1:
+            pbn_id = parts[0].strip().upper()
+            if pbn_id not in existing:
+                items.append({"pbn": pbn_id, "trailer": "Unknown", "added_at": t_stamp})
+                added += 1
+        elif len(parts) >= 2:
+            tr_id = parts[0].strip().upper()
+            pbn_id = parts[1].strip().upper()
+            if pbn_id not in existing:
+                items.append({"trailer": tr_id, "pbn": pbn_id, "added_at": t_stamp})
+                added += 1
+                
+    if added > 0:
+        save_data(items)
+        st.rerun()
+    else:
+        st.info("Items already on watchlist.")
+
+st.divider()
+st.subheader("Active Watchlist")
+
+if not items:
+    st.info("Watchlist is empty.")
+else:
+    for idx, item in enumerate(items):
+        tr = item.get("trailer", "Unknown")
+        pb = item.get("pbn", "N/A")
+        ts = item.get("added_at", "N/A")
+        
+        c1, c2 = st.columns([5, 1])
+        with c1:
+            st.info(f"Trailer: {tr} | PBN: {pb} | Added: {ts}")
+        with c2:
+            if st.button("Delete", key=f"del_{idx}"):
+                items.pop(idx)
+                save_data(items)
+                st.rerun()
+
+if st.button("Sync / Refresh"):
+    st.rerun()
