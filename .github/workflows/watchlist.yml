@@ -1,71 +1,46 @@
 name: check-watchlist
 
 on:
-  workflow_dispatch:
-
-  schedule:
-    # Every 15 minutes
-    - cron: "*/15 * * * *"
+workflow_dispatch:
+schedule:
+- cron: "*/15 * * * *"
 
 jobs:
-  check-pbn:
-    runs-on: ubuntu-latest
+check-pbn:
+runs-on: ubuntu-latest
 
-    permissions:
-      contents: write
+```
+permissions:
+  contents: write
 
-    steps:
+steps:
+  - name: Checkout repository
+    uses: actions/checkout@v4
 
-      # ---------------------------------------------
-      # Get repository
-      # ---------------------------------------------
+  - name: Set up Python
+    uses: actions/setup-python@v5
+    with:
+      python-version: "3.12"
 
-      - name: Checkout repository
-        uses: actions/checkout@v4
+  - name: Install Chromium
+    run: |
+      sudo apt-get update
+      sudo apt-get install -y chromium
 
-      # ---------------------------------------------
-      # Python
-      # ---------------------------------------------
+  - name: Install Python dependencies
+    run: |
+      python -m pip install --upgrade pip
+      pip install selenium requests
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+  - name: Run PBN watcher
+    env:
+      GOOGLE_CHAT_WEBHOOK: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
+    run: |
+      python watcher.py
 
-      # ---------------------------------------------
-      # Chromium
-      # ---------------------------------------------
-
-      - name: Install Chromium
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y chromium
-
-      # ---------------------------------------------
-      # Python packages
-      # ---------------------------------------------
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install selenium requests
-
-      # ---------------------------------------------
-      # Run watcher
-      # ---------------------------------------------
-
-      - name: Run PBN watcher
-        env:
-          GOOGLE_CHAT_WEBHOOK: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
-        run: |
-          python watcher.py
-
-      # ---------------------------------------------
-      # Save changed watchlist
-      # ---------------------------------------------
-
-      - name: Commit updated watchlist
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "Auto-update watchlist after check"
-          file_pattern: watchlist.json
+  - name: Commit updated watchlist
+    uses: stefanzweifel/git-auto-commit-action@v5
+    with:
+      commit_message: "Auto-update watchlist after check"
+      file_pattern: watchlist.json
+```
