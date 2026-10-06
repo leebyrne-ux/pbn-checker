@@ -15,7 +15,7 @@ from selenium.webdriver.support import expected_conditions as EC
 # CONFIGURATION
 # ============================================================
 
-ROS_URL = "https://www.ros.ie/customs-roro-control-web/ros/pbn/status"
+ROS_URL = "https://www.ros.ie/customs-roro-control-web/ros/freight/lookup"
 
 WATCHLIST_FILE = "watchlist.json"
 
