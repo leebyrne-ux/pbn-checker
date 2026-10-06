@@ -32,22 +32,27 @@ def send_google_chat_notification(webhook_url, trailer, pbn, status_text):
         print(f"Failed to send Google Chat message: {e}")
 
 def check_pbn_status(driver, pbn_id):
-    """Queries ROS portal using explicit wait conditions."""
-    driver.get(ROS_URL)
-    
-    wait = WebDriverWait(driver, 20)
-    input_box = wait.until(EC.presence_of_element_located((By.ID, "pbn")))
-    
-    input_box.clear()
-    input_box.send_keys(pbn_id)
-    
-    submit_btn = wait.until(EC.presence_of_element_located((By.ID, "submitPbn")))
-    driver.execute_script("arguments[0].click();", submit_btn)
-    
-    # Wait for status response
-    time.sleep(4)
-    
-    return driver.find_element(By.TAG_NAME, "body").text
+    """Queries ROS portal with retries and explicit Angular waits."""
+    for attempt in range(1, 4):
+        try:
+            driver.get(ROS_URL)
+            wait = WebDriverWait(driver, 20)
+            
+            # Wait for Angular DOM input field
+            input_box = wait.until(EC.presence_of_element_located((By.ID, "pbn")))
+            input_box.clear()
+            input_box.send_keys(pbn_id)
+            
+            submit_btn = wait.until(EC.presence_of_element_located((By.ID, "submitPbn")))
+            driver.execute_script("arguments[0].click();", submit_btn)
+            
+            time.sleep(5)
+            return driver.find_element(By.TAG_NAME, "body").text
+        except Exception as e:
+            print(f"  ⚠️ Attempt {attempt} failed for PBN {pbn_id}: {e}")
+            if attempt == 3:
+                raise e
+            time.sleep(3)
 
 def main():
     webhook_url = get_google_chat_webhook()
@@ -100,7 +105,8 @@ def main():
                     remaining_watchlist.append(item)
 
             except Exception as err:
-                print(f"❌ Error checking PBN {pbn}: {err}")
+                print(f"❌ Error checking PBN {pbn}:")
+                traceback.print_exc()
                 remaining_watchlist.append(item)
 
     except Exception as fatal_err:
