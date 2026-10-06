@@ -1,50 +1,71 @@
-name: PBN Watchlist Checker
+name: check-watchlist
 
 on:
-  schedule:
-    - cron: '3,18,33,48 6-21 * * *'
   workflow_dispatch:
 
-permissions:
-  contents: write
+  schedule:
+    # Every 15 minutes
+    - cron: "*/15 * * * *"
 
 jobs:
-  check-watchlist:
+  check-pbn:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+
+    permissions:
+      contents: write
 
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v4
-      with:
-        ref: main
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
+      # ---------------------------------------------
+      # Get repository
+      # ---------------------------------------------
 
-    - name: Check if Watchlist Has Items
-      id: check_list
-      run: |
-        python -c "import json, os; data = json.load(open('watchlist.json')) if os.path.exists('watchlist.json') else []; print('has_items=' + str(bool(data)).lower(), file=open(os.environ['GITHUB_OUTPUT'], 'a'))"
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Install Dependencies & Chrome
-      if: steps.check_list.outputs.has_items == 'true'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y chromium-chromedriver
-        pip install selenium requests
+      # ---------------------------------------------
+      # Python
+      # ---------------------------------------------
 
-    - name: Run Watcher
-      if: steps.check_list.outputs.has_items == 'true'
-      env:
-        GOOGLE_CHAT_WEBHOOK: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
-      run: python watcher.py
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
-    - name: Auto-commit Watchlist Updates
-      if: steps.check_list.outputs.has_items == 'true'
-      uses: stefanzweifel/git-auto-commit-action@v5
-      with:
-        commit_message: "Auto-update watchlist after check"
-        file_pattern: "watchlist.json"
+      # ---------------------------------------------
+      # Chromium
+      # ---------------------------------------------
+
+      - name: Install Chromium
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y chromium
+
+      # ---------------------------------------------
+      # Python packages
+      # ---------------------------------------------
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install selenium requests
+
+      # ---------------------------------------------
+      # Run watcher
+      # ---------------------------------------------
+
+      - name: Run PBN watcher
+        env:
+          GOOGLE_CHAT_WEBHOOK: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
+        run: |
+          python watcher.py
+
+      # ---------------------------------------------
+      # Save changed watchlist
+      # ---------------------------------------------
+
+      - name: Commit updated watchlist
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Auto-update watchlist after check"
+          file_pattern: watchlist.json
