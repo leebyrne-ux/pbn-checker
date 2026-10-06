@@ -86,4 +86,66 @@ current_list = load_watchlist()
 # Section 1: Add new PBNs
 st.subheader("Add PBNs to Watchlist")
 
-with st.form("add_pbn_form", clear_
+with st.form("add_pbn_form", clear_on_submit=True):
+    raw_pasted_text = st.text_area(
+        "Paste PBNs and Trailer Regs Here",
+        placeholder="Format options:\nRX23VN92\nGTC415 RX23VN92\nGTC372, ER47AF49",
+        height=120
+    )
+    submit_button = st.form_submit_button("Add to Watchlist")
+
+if submit_button and raw_pasted_text.strip():
+    new_items = []
+    lines = raw_pasted_text.strip().split("\n")
+    now_str = datetime.now().strftime("%H:%M:%S")
+
+    for line in lines:
+        parts = line.replace(",", " ").split()
+        if len(parts) == 1:
+            new_items.append({
+                "pbn": parts[0].strip().upper(),
+                "trailer": "Unknown",
+                "added_at": now_str
+            })
+        elif len(parts) >= 2:
+            new_items.append({
+                "trailer": parts[0].strip().upper(),
+                "pbn": parts[1].strip().upper(),
+                "added_at": now_str
+            })
+
+    if new_items:
+        existing_pbns = {item.get("pbn") for item in current_list}
+        added_count = 0
+        
+        for item in new_items:
+            if item["pbn"] not in existing_pbns:
+                current_list.append(item)
+                added_count += 1
+        
+        if added_count > 0:
+            save_watchlist_and_commit(current_list)
+            st.rerun()
+        else:
+            st.info("All entered PBNs are already on the watchlist.")
+
+st.divider()
+
+# Section 2: Active Watchlist Display
+st.subheader("👁️ Active Watchlist (Auto-checking every 15 min)")
+
+if not current_list:
+    st.info("Watchlist is currently empty. Add PBNs above to start automated monitoring.")
+else:
+    for idx, item in enumerate(current_list):
+        trailer = item.get("trailer", "Unknown")
+        pbn = item.get("pbn", "N/A")
+        added_at = item.get("added_at", "N/A")
+        
+        col1, col2 = st.columns([5, 1])
+        with col1:
+            st.info(f"🚛 **Trailer:** {trailer} | **PBN:** {pbn} | Added at {added_at}")
+        with col2:
+            if st.button("Delete", key=f"del_{idx}"):
+                current_list.pop(idx)
+                save_watchlist_and_commit(
