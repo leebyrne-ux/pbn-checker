@@ -31,26 +31,25 @@ def send_google_chat_notification(webhook_url, trailer, pbn, status_text):
         print(f"Failed to send Google Chat message: {e}")
 
 def check_pbn_status(driver, pbn_id):
-    """Queries ROS portal using Selenium and returns body text."""
+    """Queries ROS portal using Selenium and returns the full page source text."""
     driver.get(ROS_URL)
     
-    # Wait for input field
-    input_box = WebDriverWait(driver, 15).until(
-        EC.presence_of_element_located((By.ID, "pbn"))
+    # Wait explicitly for input field to be clickable
+    input_box = WebDriverWait(driver, 20).until(
+        EC.element_to_be_clickable((By.ID, "pbn"))
     )
     input_box.clear()
     input_box.send_keys(pbn_id)
     
-    submit_btn = driver.find_element(By.ID, "submitPbn")
+    submit_btn = WebDriverWait(driver, 10).until(
+        EC.element_to_be_clickable((By.ID, "submitPbn"))
+    )
     submit_btn.click()
     
-    # Wait for status response container
-    WebDriverWait(driver, 15).until(
-        EC.presence_of_element_located((By.TAG_NAME, "body"))
-    )
-    time.sleep(2) # Brief delay for Angular rendering
+    # Give ROS time to load and populate the clearance channel container
+    time.sleep(3)
     
-    return driver.find_element(By.TAG_NAME, "body").text
+    return driver.page_source
 
 def main():
     webhook_url = get_google_chat_webhook()
@@ -75,8 +74,6 @@ def main():
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
     options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-    
-    # Point directly to the chromium binary installed by apt/snap
     options.binary_location = "/usr/bin/chromium-browser"
 
     driver = None
@@ -84,8 +81,7 @@ def main():
 
     try:
         driver = webdriver.Chrome(options=options)
-        driver.set_page_load_timeout(20)
-        driver.implicitly_wait(10)
+        driver.set_page_load_timeout(25)
 
         for item in watchlist:
             pbn = item.get("pbn")
@@ -93,8 +89,8 @@ def main():
 
             try:
                 print(f"Checking status for Trailer: {trailer} | PBN: {pbn}...")
-                page_text = check_pbn_status(driver, pbn)
-                text_upper = page_text.upper()
+                page_source = check_pbn_status(driver, pbn)
+                text_upper = page_source.upper()
 
                 if "EXIT THE PORT" in text_upper or "EXIT PORT" in text_upper or "EXIT" in text_upper:
                     print(f"✅ CLEARANCE DETECTED for {trailer} ({pbn})!")
@@ -118,7 +114,7 @@ def main():
         if driver:
             driver.quit()
 
-    # Save updated watchlist
+    # Save updated watchlist (cleared items removed)
     with open("watchlist.json", "w") as f:
         json.dump(remaining_watchlist, f, indent=2)
 
