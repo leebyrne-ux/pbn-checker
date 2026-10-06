@@ -7,7 +7,7 @@ from github import Github
 # Page Configuration
 st.set_page_config(
     page_title="Customs PBN Batch Checker",
-    page_icon="🚛",
+    page_icon="🚚",
     layout="centered"
 )
 
@@ -72,7 +72,7 @@ def save_watchlist_and_commit(watchlist_data):
     else:
         st.warning("GITHUB_TOKEN or REPO_NAME missing in secrets. Saved locally only.")
 
-# --- APP UI LOGIC ---
+# --- APP UI & LOGIC ---
 
 st.title("Customs PBN Batch Checker")
 st.caption(f"Current Local Time: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
@@ -119,17 +119,4 @@ if submit_button and raw_pasted_text.strip():
                 added_count += 1
         
         if added_count > 0:
-            save_watchlist_and_commit(current_list)
-            st.rerun()
-        else:
-            st.info("All entered PBNs are already on the watchlist.")
-
-st.divider()
-
-st.subheader("Active Watchlist (Auto-checking every 15 min)")
-
-if not current_list:
-    st.info("Watchlist is currently empty. Add PBNs above to start automated monitoring.")
-else:
-    for idx, item in enumerate(current_list):
-        trailer =
+            save_watchlist_and_commit(current_
