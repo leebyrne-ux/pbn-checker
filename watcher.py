@@ -44,7 +44,7 @@ def check_pbn_status(driver, pbn_id):
     submit_btn = wait.until(EC.presence_of_element_located((By.ID, "submitPbn")))
     driver.execute_script("arguments[0].click();", submit_btn)
     
-    # Pause for status DOM update
+    # Pause for Angular status DOM update
     time.sleep(4)
     
     return driver.find_element(By.TAG_NAME, "body").text
