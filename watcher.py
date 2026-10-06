@@ -13,7 +13,6 @@ def get_google_chat_webhook():
     return os.getenv("GOOGLE_CHAT_WEBHOOK")
 
 def send_google_chat_notification(webhook_url, trailer, pbn, status_text):
-    """Sends a formatted notification to Google Chat when a unit clears."""
     message = {
         "text": (
             f"🟢 *PBN CLEARANCE ALERT*\n\n"
@@ -31,37 +30,30 @@ def send_google_chat_notification(webhook_url, trailer, pbn, status_text):
         print(f"Failed to send Google Chat message: {e}")
 
 def check_pbn_status(driver, pbn_id):
-    """Queries ROS portal using explicit wait conditions for Angular rendering."""
     driver.get(ROS_URL)
-    
-    # Wait up to 20 seconds for ROS Angular input field to attach to DOM
     wait = WebDriverWait(driver, 20)
-    input_box = wait.until(EC.presence_of_element_located((By.ID, "pbn")))
     
+    # Wait for Angular input field
+    input_box = wait.until(EC.presence_of_element_located((By.ID, "pbn")))
     input_box.clear()
     input_box.send_keys(pbn_id)
     
     submit_btn = wait.until(EC.presence_of_element_located((By.ID, "submitPbn")))
     driver.execute_script("arguments[0].click();", submit_btn)
     
-    # Pause for status DOM update
     time.sleep(4)
-    
     return driver.find_element(By.TAG_NAME, "body").text
 
 def main():
     webhook_url = get_google_chat_webhook()
-    print(f"Webhook URL presence: {'CONFIGURED' if webhook_url else 'MISSING'}")
     
     if not os.path.exists("watchlist.json"):
-        print("watchlist.json not found. Exiting.")
         return
 
     with open("watchlist.json", "r") as f:
         watchlist = json.load(f)
 
     if not watchlist:
-        print("Watchlist is empty. Nothing to check.")
         return
 
     options = webdriver.ChromeOptions()
@@ -94,8 +86,6 @@ def main():
                     print(f"✅ CLEARANCE DETECTED for {trailer} ({pbn})!")
                     if webhook_url:
                         send_google_chat_notification(webhook_url, trailer, pbn, "Exit the Port")
-                    else:
-                        print("Cleared status detected, but webhook URL is missing.")
                 else:
                     print(f"⏳ Still pending or called for {trailer} ({pbn}).")
                     remaining_watchlist.append(item)
@@ -104,15 +94,10 @@ def main():
                 print(f"❌ Error checking PBN {pbn}: {err}")
                 remaining_watchlist.append(item)
 
-    except Exception as fatal_err:
-        print(f"Fatal Chrome error: {fatal_err}")
-        remaining_watchlist = watchlist
-
     finally:
         if driver:
             driver.quit()
 
-    # Save updated watchlist back to file
     with open("watchlist.json", "w") as f:
         json.dump(remaining_watchlist, f, indent=2)
 
