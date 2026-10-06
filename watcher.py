@@ -32,25 +32,21 @@ def send_google_chat_notification(webhook_url, trailer, pbn, status_text):
 
 def check_pbn_status(driver, pbn_id):
     """Queries ROS portal and extracts rendered page text."""
-    # First attempt: standard ROS page entry
     driver.get(ROS_URL)
-    time.sleep(3)
     
-    # Try finding input field
-    try:
-        input_box = driver.find_element(By.ID, "pbn")
-        input_box.clear()
-        input_box.send_keys(pbn_id)
-        
-        submit_btn = driver.find_element(By.ID, "submitPbn")
-        driver.execute_script("arguments[0].click();", submit_btn)
-        time.sleep(5)
-    except Exception as sub_err:
-        print(f"Form submission fallback triggered: {sub_err}")
-        # Secondary attempt: Direct URL query
-        driver.get(f"{ROS_URL}?pbn={pbn_id}")
-        time.sleep(5)
-
+    # Wait explicitly for ROS Angular input field to load (up to 25 seconds)
+    wait = WebDriverWait(driver, 25)
+    input_box = wait.until(EC.presence_of_element_located((By.ID, "pbn")))
+    
+    input_box.clear()
+    input_box.send_keys(pbn_id)
+    
+    submit_btn = driver.find_element(By.ID, "submitPbn")
+    driver.execute_script("arguments[0].click();", submit_btn)
+    
+    # Wait for Angular status calculation to render
+    time.sleep(5)
+    
     return driver.find_element(By.TAG_NAME, "body").text
 
 def main():
