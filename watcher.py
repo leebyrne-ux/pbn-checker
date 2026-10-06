@@ -31,21 +31,26 @@ def send_google_chat_notification(webhook_url, trailer, pbn, status_text):
         print(f"Failed to send Google Chat message: {e}")
 
 def check_pbn_status(driver, pbn_id):
-    """Queries ROS portal using Selenium and returns body text."""
+    """Queries ROS portal and extracts rendered page text."""
+    # First attempt: standard ROS page entry
     driver.get(ROS_URL)
+    time.sleep(3)
     
-    wait = WebDriverWait(driver, 15)
-    input_box = wait.until(EC.presence_of_element_located((By.ID, "pbn")))
-    
-    input_box.clear()
-    input_box.send_keys(pbn_id)
-    
-    submit_btn = driver.find_element(By.ID, "submitPbn")
-    driver.execute_script("arguments[0].click();", submit_btn)
-    
-    # Allow Angular time to fetch and render channel response
-    time.sleep(5)
-    
+    # Try finding input field
+    try:
+        input_box = driver.find_element(By.ID, "pbn")
+        input_box.clear()
+        input_box.send_keys(pbn_id)
+        
+        submit_btn = driver.find_element(By.ID, "submitPbn")
+        driver.execute_script("arguments[0].click();", submit_btn)
+        time.sleep(5)
+    except Exception as sub_err:
+        print(f"Form submission fallback triggered: {sub_err}")
+        # Secondary attempt: Direct URL query
+        driver.get(f"{ROS_URL}?pbn={pbn_id}")
+        time.sleep(5)
+
     return driver.find_element(By.TAG_NAME, "body").text
 
 def main():
@@ -78,7 +83,7 @@ def main():
 
     try:
         driver = webdriver.Chrome(options=options)
-        driver.set_page_load_timeout(25)
+        driver.set_page_load_timeout(30)
 
         for item in watchlist:
             pbn = item.get("pbn")
@@ -88,13 +93,12 @@ def main():
                 print(f"Checking status for Trailer: {trailer} | PBN: {pbn}...")
                 page_text = check_pbn_status(driver, pbn)
                 text_upper = page_text.upper()
-                
-                print(f"--- DEBUG PAGE TEXT FOR {pbn} ---")
-                print(page_text[:600]) # Prints top 600 characters of rendered ROS page
-                print("---------------------------------")
 
-                # Broad keyword check for clearance
-                if "EXIT THE PORT" in text_upper or "EXIT PORT" in text_upper or "EXIT" in text_upper or "GREEN" in text_upper:
+                print(f"--- RENDERED TEXT FOR {pbn} ({len(page_text)} chars) ---")
+                print(page_text[:400].replace('\n', ' '))
+                print("--------------------------------------------------")
+
+                if "EXIT THE PORT" in text_upper or "EXIT PORT" in text_upper or "EXIT" in text_upper:
                     print(f"✅ CLEARANCE DETECTED for {trailer} ({pbn})!")
                     if webhook_url:
                         send_google_chat_notification(webhook_url, trailer, pbn, "Exit the Port")
