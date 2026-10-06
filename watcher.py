@@ -2,72 +2,15 @@ import os
 import json
 import time
 import requests
-import traceback
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 
 ROS_URL = "https://www.ros.ie/tis/pbn-status-web/pbnStatus"
 
 def get_google_chat_webhook():
     return os.getenv("GOOGLE_CHAT_WEBHOOK")
 
-def send_google_chat_notification(webhook_url, trailer, pbn, status_text):
-    """Sends a formatted notification to Google Chat when a unit clears."""
-    message = {
-        "text": (
-            f"🟢 *PBN CLEARANCE ALERT*\n\n"
-            f"🚛 *Trailer / Reg:* {trailer}\n"
-            f"📄 *PBN:* {pbn}\n"
-            f"📍 *Status:* *{status_text}*\n\n"
-            f"✅ Unit cleared and removed from active watchlist."
-        )
-    }
-    try:
-        res = requests.post(webhook_url, json=message, timeout=10)
-        res.raise_for_status()
-        print(f"Notification sent successfully for {trailer} ({pbn}).")
-    except Exception as e:
-        print(f"Failed to send Google Chat message: {e}")
-
-def check_pbn_status(driver, pbn_id):
-    """Queries ROS portal with retries and explicit Angular waits."""
-    for attempt in range(1, 4):
-        try:
-            driver.get(ROS_URL)
-            wait = WebDriverWait(driver, 15)
-            input_box = wait.until(EC.presence_of_element_located((By.ID, "pbn")))
-            
-            input_box.clear()
-            input_box.send_keys(pbn_id)
-            
-            submit_btn = wait.until(EC.presence_of_element_located((By.ID, "submitPbn")))
-            driver.execute_script("arguments[0].click();", submit_btn)
-            
-            time.sleep(4)
-            return driver.find_element(By.TAG_NAME, "body").text
-        except Exception as e:
-            print(f"  ⚠️ Attempt {attempt} failed for PBN {pbn_id}: {e}")
-            if attempt == 3:
-                raise e
-            time.sleep(3)
-
 def main():
-    webhook_url = get_google_chat_webhook()
-    print(f"Webhook URL presence: {'CONFIGURED' if webhook_url else 'MISSING'}")
-    
-    if not os.path.exists("watchlist.json"):
-        print("watchlist.json not found. Exiting.")
-        return
-
-    with open("watchlist.json", "r") as f:
-        watchlist = json.load(f)
-
-    if not watchlist:
-        print("Watchlist is empty. Nothing to check.")
-        return
-
     options = webdriver.ChromeOptions()
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
@@ -77,47 +20,34 @@ def main():
     options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
     options.binary_location = "/usr/bin/chromium-browser"
 
-    driver = None
-    remaining_watchlist = []
+    driver = webdriver.Chrome(options=options)
 
     try:
-        driver = webdriver.Chrome(options=options)
-        driver.set_page_load_timeout(30)
+        print("Navigating to ROS PBN page...")
+        driver.get(ROS_URL)
+        time.sleep(6) # Allow full SPA load
 
-        for item in watchlist:
-            pbn = item.get("pbn")
-            trailer = item.get("trailer", "Unknown")
+        print("--- PAGE TITLE ---")
+        print(driver.title)
 
-            try:
-                print(f"Checking status for Trailer: {trailer} | PBN: {pbn}...")
-                page_text = check_pbn_status(driver, pbn)
-                text_upper = page_text.upper()
+        print("--- ALL INPUT ELEMENTS ON PAGE ---")
+        inputs = driver.find_elements(By.TAG_NAME, "input")
+        for inp in inputs:
+            print(f"INPUT -> id: '{inp.get_attribute('id')}', name: '{inp.get_attribute('name')}', placeholder: '{inp.get_attribute('placeholder')}', class: '{inp.get_attribute('class')}'")
 
-                if "EXIT THE PORT" in text_upper or "EXIT PORT" in text_upper or "EXIT" in text_upper:
-                    print(f"✅ CLEARANCE DETECTED for {trailer} ({pbn})!")
-                    if webhook_url:
-                        send_google_chat_notification(webhook_url, trailer, pbn, "Exit the Port")
-                    else:
-                        print("Cleared status detected, but webhook URL is missing.")
-                else:
-                    print(f"⏳ Still pending or called for {trailer} ({pbn}).")
-                    remaining_watchlist.append(item)
+        print("--- ALL BUTTON ELEMENTS ON PAGE ---")
+        buttons = driver.find_elements(By.TAG_NAME, "button")
+        for btn in buttons:
+            print(f"BUTTON -> id: '{btn.get_attribute('id')}', text: '{btn.text}', type: '{btn.get_attribute('type')}'")
 
-            except Exception as err:
-                print(f"❌ Error checking PBN {pbn}:")
-                traceback.print_exc()
-                remaining_watchlist.append(item)
+        print("--- IFRAMES PRESENT ---")
+        iframes = driver.find_elements(By.TAG_NAME, "iframe")
+        print(f"Total iframes: {len(iframes)}")
 
-    except Exception as fatal_err:
-        print(f"Fatal Chrome error: {fatal_err}")
-        remaining_watchlist = watchlist
-
+    except Exception as e:
+        print(f"Error during inspection: {e}")
     finally:
-        if driver:
-            driver.quit()
-
-    with open("watchlist.json", "w") as f:
-        json.dump(remaining_watchlist, f, indent=2)
+        driver.quit()
 
 if __name__ == "__main__":
     main()
