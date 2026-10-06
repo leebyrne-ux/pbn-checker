@@ -1,46 +1,49 @@
 name: check-watchlist
 
 on:
-workflow_dispatch:
-schedule:
-- cron: "*/15 * * * *"
+  workflow_dispatch:
+  schedule:
+    - cron: "*/15 * * * *"
 
 jobs:
-check-pbn:
-runs-on: ubuntu-latest
+  check-pbn:
+    runs-on: ubuntu-24.04
 
-```
-permissions:
-  contents: write
+    permissions:
+      contents: write
 
-steps:
-  - name: Checkout repository
-    uses: actions/checkout@v4
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-  - name: Set up Python
-    uses: actions/setup-python@v5
-    with:
-      python-version: "3.12"
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
-  - name: Install Chromium
-    run: |
-      sudo apt-get update
-      sudo apt-get install -y chromium
+      - name: Install Chromium
+        run: |
+          sudo snap install chromium
 
-  - name: Install Python dependencies
-    run: |
-      python -m pip install --upgrade pip
-      pip install selenium requests
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install selenium requests
 
-  - name: Run PBN watcher
-    env:
-      GOOGLE_CHAT_WEBHOOK: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
-    run: |
-      python watcher.py
+      - name: Verify Chromium
+        run: |
+          which chromium || true
+          ls -l /snap/bin/chromium
+          /snap/bin/chromium --version
 
-  - name: Commit updated watchlist
-    uses: stefanzweifel/git-auto-commit-action@v5
-    with:
-      commit_message: "Auto-update watchlist after check"
-      file_pattern: watchlist.json
-```
+      - name: Run PBN watcher
+        env:
+          GOOGLE_CHAT_WEBHOOK: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
+        run: |
+          python watcher.py
+
+      - name: Commit updated watchlist
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Auto-update watchlist after check"
+          file_pattern: watchlist.json
