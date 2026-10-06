@@ -1,8 +1,9 @@
+```python
 import os
 import json
 import time
-import shutil
 import traceback
+import shutil
 import requests
 
 from selenium import webdriver
@@ -10,11 +11,13 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
+
 # ============================================================
 # CONFIGURATION
 # ============================================================
 
 ROS_URL = "https://www.ros.ie/customs-roro-control-web/ros/pbn/status"
+
 WATCHLIST_FILE = "watchlist.json"
 
 MAX_RETRIES = 3
@@ -30,8 +33,16 @@ def get_google_chat_webhook():
     return os.getenv("GOOGLE_CHAT_WEBHOOK")
 
 
-def send_google_chat_notification(webhook_url, trailer, pbn, status_text):
-    """Send a notification to Google Chat when a PBN clears."""
+def send_google_chat_notification(
+    webhook_url,
+    trailer,
+    pbn,
+    status_text
+):
+    """
+    Send a clearance notification to Google Chat.
+    """
+
     message = {
         "text": (
             "🟢 *PBN CLEARANCE ALERT*\n\n"
@@ -46,323 +57,950 @@ def send_google_chat_notification(webhook_url, trailer, pbn, status_text):
         response = requests.post(
             webhook_url,
             json=message,
-            timeout=15,
+            timeout=15
         )
+
         response.raise_for_status()
-        print(f"✅ Google Chat notification sent for {trailer} ({pbn}).")
+
+        print(
+            f"✅ Google Chat notification sent "
+            f"for {trailer} ({pbn})."
+        )
+
     except Exception as error:
-        print(f"⚠️ Failed to send Google Chat notification: {type(error).__name__}: {error}")
+        print(
+            "⚠️ Failed to send Google Chat notification: "
+            f"{type(error).__name__}: {error}"
+        )
 
 
 # ============================================================
-# BROWSER SETUP
+# CHROMIUM
 # ============================================================
 
 def find_chromium():
-    """Try to locate Chromium on the GitHub Actions runner."""
+    """
+    Find Chromium on the GitHub Actions runner.
+    """
+
     possible_paths = [
-        shutil.which("chromium"),
-        shutil.which("chromium-browser"),
+        "/snap/bin/chromium",
         "/usr/bin/chromium",
         "/usr/bin/chromium-browser",
-        "/snap/bin/chromium",
+        shutil.which("chromium"),
+        shutil.which("chromium-browser"),
     ]
 
     for path in possible_paths:
+
         if path and os.path.exists(path):
-            print(f"✅ Chromium found at: {path}")
+
+            print(
+                f"✅ Chromium found at: {path}"
+            )
+
             return path
 
-    print("⚠️ Chromium binary could not be located. Driver will attempt default lookup.")
+    print(
+        "⚠️ Chromium binary could not be located."
+    )
+
     return None
 
 
 def create_driver():
-    """Create a fresh Chrome/Chromium Selenium driver."""
+    """
+    Create a Selenium Chromium driver.
+
+    IMPORTANT:
+    We deliberately do NOT install or specify a separate
+    chromedriver here.
+
+    Selenium Manager will handle the driver.
+    """
+
+    print("")
     print("Starting Chromium...")
+
     options = webdriver.ChromeOptions()
 
+    # GitHub Actions / Linux
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
+
+    # Browser window
     options.add_argument("--window-size=1920,1080")
+
+    # Make browser look like a normal desktop browser
     options.add_argument(
-        "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        "--user-agent="
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/120.0.0.0 Safari/537.36"
     )
+
+    # Stability
     options.add_argument("--disable-extensions")
     options.add_argument("--disable-background-networking")
     options.add_argument("--disable-default-apps")
     options.add_argument("--disable-sync")
 
+    # Find Chromium
     chromium_path = find_chromium()
+
     if chromium_path:
+
         options.binary_location = chromium_path
 
     try:
-        driver = webdriver.Chrome(options=options)
-        driver.set_page_load_timeout(PAGE_LOAD_TIMEOUT)
-        print("✅ Chromium started successfully.")
+
+        # Do NOT specify chromedriver.
+        #
+        # Selenium Manager handles the driver.
+
+        driver = webdriver.Chrome(
+            options=options
+        )
+
+        driver.set_page_load_timeout(
+            PAGE_LOAD_TIMEOUT
+        )
+
+        print(
+            "✅ Chromium started successfully."
+        )
+
         return driver
+
     except Exception as error:
-        print("❌ Failed to start Chromium.")
-        print(f"Exception message: {error!r}")
+
+        print(
+            "❌ Failed to start Chromium."
+        )
+
+        print(
+            f"Exception type: "
+            f"{type(error).__name__}"
+        )
+
+        print(
+            f"Exception message: "
+            f"{error!r}"
+        )
+
         traceback.print_exc()
+
         raise
+
+
+# ============================================================
+# ROS PAGE
+# ============================================================
+
+def open_ros_page(driver):
+    """
+    Open the Revenue ROS PBN status page.
+    """
+
+    print(
+        f"Opening ROS page: {ROS_URL}"
+    )
+
+    driver.get(ROS_URL)
+
+    wait = WebDriverWait(
+        driver,
+        RESULT_WAIT_TIMEOUT
+    )
+
+    # The current ROS page contains a visible input.
+    #
+    # We intentionally don't rely on the old ID="pbn",
+    # because that was part of the previous page implementation.
+
+    input_box = wait.until(
+        EC.visibility_of_element_located(
+            (
+                By.XPATH,
+                "//input[not(@type='hidden')]"
+            )
+        )
+    )
+
+    print(
+        "✅ PBN input found."
+    )
+
+    return input_box
+
+
+def find_check_button(driver):
+    """
+    Find the current ROS Check Status button.
+    """
+
+    wait = WebDriverWait(
+        driver,
+        RESULT_WAIT_TIMEOUT
+    )
+
+    button = wait.until(
+        EC.element_to_be_clickable(
+            (
+                By.XPATH,
+                "//button[contains("
+                "translate(normalize-space(.),"
+                "'ABCDEFGHIJKLMNOPQRSTUVWXYZ',"
+                "'abcdefghijklmnopqrstuvwxyz'),"
+                "'check status'"
+                ")]"
+            )
+        )
+    )
+
+    print(
+        "✅ Check Status button found."
+    )
+
+    return button
 
 
 # ============================================================
 # DEBUGGING
 # ============================================================
 
-def save_debug_files(driver, pbn_id, attempt):
-    """Save screenshot and HTML whenever a ROS check fails."""
-    if not driver:
-        return
+def save_debug_files(
+    driver,
+    pbn_id,
+    attempt
+):
+    """
+    Save screenshot and HTML when a check fails.
 
-    safe_pbn = "".join(c for character in pbn_id if (c := character).isalnum())
-    screenshot_file = f"debug_{safe_pbn}_attempt_{attempt}.png"
-    html_file = f"debug_{safe_pbn}_attempt_{attempt}.html"
+    These files can be uploaded from the GitHub Action
+    and allow us to see exactly what ROS returned.
+    """
 
-    try:
-        driver.save_screenshot(screenshot_file)
-        print(f"  📸 Debug screenshot saved: {screenshot_file}")
-    except Exception as error:
-        print(f"  Could not save screenshot: {error!r}")
-
-    try:
-        with open(html_file, "w", encoding="utf-8") as file:
-            file.write(driver.page_source)
-        print(f"  📄 Debug HTML saved: {html_file}")
-    except Exception as error:
-        print(f"  Could not save HTML: {error!r}")
-
-
-# ============================================================
-# ROS PAGE INTERACTION
-# ============================================================
-
-def wait_for_ros_page(driver):
-    """Open ROS page and return PBN input element once visible."""
-    print(f"Opening ROS page: {ROS_URL}")
-    driver.get(ROS_URL)
-    wait = WebDriverWait(driver, RESULT_WAIT_TIMEOUT)
-
-    input_box = wait.until(
-        EC.visibility_of_element_located((By.XPATH, "//input[not(@type='hidden')]"))
+    safe_pbn = "".join(
+        character
+        for character in pbn_id
+        if character.isalnum()
     )
-    print("✅ PBN input found.")
-    return input_box
 
+    screenshot_file = (
+        f"debug_{safe_pbn}_attempt_{attempt}.png"
+    )
 
-def find_check_button(driver):
-    """Locate the ROS Check Status button via normalized text matching."""
-    wait = WebDriverWait(driver, RESULT_WAIT_TIMEOUT)
-    button = wait.until(
-        EC.element_to_be_clickable(
-            (
-                By.XPATH,
-                "//button[contains(translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'check status')]"
-            )
+    html_file = (
+        f"debug_{safe_pbn}_attempt_{attempt}.html"
+    )
+
+    # Screenshot
+    try:
+
+        driver.save_screenshot(
+            screenshot_file
         )
-    )
-    print("✅ Check Status button found.")
-    return button
+
+        print(
+            f"📸 Debug screenshot saved: "
+            f"{screenshot_file}"
+        )
+
+    except Exception as error:
+
+        print(
+            "⚠️ Could not save screenshot: "
+            f"{error!r}"
+        )
+
+    # HTML
+    try:
+
+        with open(
+            html_file,
+            "w",
+            encoding="utf-8"
+        ) as file:
+
+            file.write(
+                driver.page_source
+            )
+
+        print(
+            f"📄 Debug HTML saved: "
+            f"{html_file}"
+        )
+
+    except Exception as error:
+
+        print(
+            "⚠️ Could not save HTML: "
+            f"{error!r}"
+        )
 
 
 # ============================================================
-# PBN CHECK
+# CHECK ONE PBN
 # ============================================================
 
-def check_pbn_status(driver, pbn_id):
-    """Check one PBN on Revenue ROS with retry logic."""
+def check_pbn_status(
+    driver,
+    pbn_id
+):
+    """
+    Check a single PBN on the ROS website.
+
+    Returns:
+        page_text, driver
+
+    The driver may be replaced if Selenium encounters
+    a browser failure during a retry.
+    """
+
     last_error = None
 
-    for attempt in range(1, MAX_RETRIES + 1):
-        print(f"  Attempt {attempt}/{MAX_RETRIES} for PBN {pbn_id}")
+    for attempt in range(
+        1,
+        MAX_RETRIES + 1
+    ):
+
+        print("")
+        print(
+            f"Checking PBN {pbn_id}"
+        )
+
+        print(
+            f"Attempt {attempt}/{MAX_RETRIES}"
+        )
 
         try:
-            input_box = wait_for_ros_page(driver)
+
+            # --------------------------------------------
+            # Open ROS
+            # --------------------------------------------
+
+            input_box = open_ros_page(
+                driver
+            )
+
+            # --------------------------------------------
+            # Enter PBN
+            # --------------------------------------------
+
             input_box.clear()
-            input_box.send_keys(pbn_id)
-            print("  PBN entered.")
 
-            submit_button = find_check_button(driver)
-            driver.execute_script("arguments[0].click();", submit_button)
-            print("  Check Status clicked.")
+            input_box.send_keys(
+                pbn_id
+            )
 
-            # Wait until status text or indicators render
-            wait = WebDriverWait(driver, RESULT_WAIT_TIMEOUT)
+            print(
+                "PBN entered."
+            )
 
-            def result_has_loaded(d):
-                text = d.find_element(By.TAG_NAME, "body").text.strip().upper()
-                indicators = [
-                    "EXIT THE PORT",
-                    "CALL TO CUSTOMS",
-                    "CALL TO CUSTOMS - TRANSIT",
-                    "CALL TO CUSTOMS - SEAL",
-                    "GOOD TO PROCEED TO CHECK-IN",
-                    "PROCEED",
-                    "PBN STATUS",
-                    "PBN ID",
-                    "STATUS",
-                ]
-                return any(ind in text for ind in indicators)
+            # --------------------------------------------
+            # Find button
+            # --------------------------------------------
 
-            wait.until(result_has_loaded)
+            submit_button = find_check_button(
+                driver
+            )
+
+            # --------------------------------------------
+            # Click
+            # --------------------------------------------
+
+            driver.execute_script(
+                "arguments[0].click();",
+                submit_button
+            )
+
+            print(
+                "Check Status clicked."
+            )
+
+            # --------------------------------------------
+            # Wait for result
+            # --------------------------------------------
+
+            wait = WebDriverWait(
+                driver,
+                RESULT_WAIT_TIMEOUT
+            )
+
+            def result_has_loaded(browser):
+
+                try:
+
+                    text = browser.find_element(
+                        By.TAG_NAME,
+                        "body"
+                    ).text.strip()
+
+                    upper = text.upper()
+
+                    indicators = [
+                        "EXIT THE PORT",
+                        "CALL TO CUSTOMS",
+                        "GOOD TO PROCEED",
+                        "PROCEED",
+                        "PBN STATUS",
+                        "PBN ID",
+                        "STATUS",
+                    ]
+
+                    return any(
+                        indicator in upper
+                        for indicator in indicators
+                    )
+
+                except Exception:
+
+                    return False
+
+            wait.until(
+                result_has_loaded
+            )
+
+            # Allow Angular to finish rendering
             time.sleep(1)
 
-            page_text = driver.find_element(By.TAG_NAME, "body").text.strip()
-            if not page_text:
-                raise RuntimeError("ROS returned an empty page.")
+            # --------------------------------------------
+            # Read page
+            # --------------------------------------------
 
-            print("  ✅ ROS returned a result.")
-            return driver, page_text
+            page_text = driver.find_element(
+                By.TAG_NAME,
+                "body"
+            ).text.strip()
+
+            if not page_text:
+
+                raise RuntimeError(
+                    "ROS returned an empty page."
+                )
+
+            print(
+                "✅ ROS returned a result."
+            )
+
+            return page_text, driver
 
         except Exception as error:
+
             last_error = error
-            print(f"  ⚠️ Attempt {attempt} failed.")
-            print(f"  Error type: {type(error).__name__}")
-            print(f"  Error: {error!r}")
 
-            save_debug_files(driver, pbn_id, attempt)
+            print("")
+            print(
+                f"⚠️ Attempt {attempt} failed."
+            )
 
+            print(
+                f"Error type: "
+                f"{type(error).__name__}"
+            )
+
+            print(
+                f"Error message: "
+                f"{error!r}"
+            )
+
+            # Save diagnostics
+            try:
+
+                save_debug_files(
+                    driver,
+                    pbn_id,
+                    attempt
+                )
+
+            except Exception:
+
+                pass
+
+            # Retry
             if attempt < MAX_RETRIES:
-                print("  Retrying in 5 seconds...")
-                time.sleep(5)
-                try:
-                    driver.quit()
-                except Exception:
-                    pass
-                driver = create_driver()
-            else:
-                print(f"❌ All {MAX_RETRIES} attempts failed for PBN {pbn_id}.")
 
+                print(
+                    "Retrying in 5 seconds..."
+                )
+
+                time.sleep(5)
+
+                # Recreate browser
+                try:
+
+                    driver.quit()
+
+                except Exception:
+
+                    pass
+
+                driver = create_driver()
+
+    # All attempts failed
     raise last_error
 
 
 # ============================================================
-# STATUS INTERPRETATION
+# DETERMINE CLEARANCE
 # ============================================================
 
 def is_cleared(page_text):
-    """Determine whether the PBN has received an Exit the Port channel."""
+    """
+    Determine whether ROS says the unit can Exit the Port.
+
+    IMPORTANT:
+    We deliberately do NOT search simply for the word
+    'EXIT', because that could cause false positives.
+    """
+
     text = page_text.upper()
+
     if "EXIT THE PORT" in text:
+
         return True, "Exit the Port"
+
     return False, None
 
 
+# ============================================================
+# PRINT ROS RESPONSE
+# ============================================================
+
 def print_status_summary(page_text):
-    """Print ROS response summary to logs."""
-    print("\n---------- ROS RESPONSE ----------")
-    lines = [line.strip() for line in page_text.splitlines() if line.strip()]
+    """
+    Print the ROS response to the GitHub Actions log.
+    """
+
+    print("")
+    print(
+        "---------- ROS RESPONSE ----------"
+    )
+
+    lines = [
+        line.strip()
+        for line in page_text.splitlines()
+        if line.strip()
+    ]
+
     for line in lines:
+
         print(line)
-    print("-------- END ROS RESPONSE --------\n")
+
+    print(
+        "-------- END ROS RESPONSE --------"
+    )
+
+    print("")
 
 
 # ============================================================
-# MAIN EXECUTION
+# MAIN
 # ============================================================
 
 def main():
-    print("\n========================================")
-    print("        ROS PBN WATCHER")
-    print("========================================\n")
+
+    print("")
+    print(
+        "========================================"
+    )
+
+    print(
+        "           ROS PBN WATCHER"
+    )
+
+    print(
+        "========================================"
+    )
+
+    print("")
+
+    # --------------------------------------------------------
+    # Google Chat
+    # --------------------------------------------------------
 
     webhook_url = get_google_chat_webhook()
-    print("Google Chat webhook: " + ("CONFIGURED" if webhook_url else "MISSING"))
 
-    if not os.path.exists(WATCHLIST_FILE):
-        print(f"❌ {WATCHLIST_FILE} not found.")
+    if webhook_url:
+
+        print(
+            "Google Chat webhook: CONFIGURED"
+        )
+
+    else:
+
+        print(
+            "Google Chat webhook: MISSING"
+        )
+
+    # --------------------------------------------------------
+    # Watchlist
+    # --------------------------------------------------------
+
+    if not os.path.exists(
+        WATCHLIST_FILE
+    ):
+
+        print(
+            f"❌ {WATCHLIST_FILE} not found."
+        )
+
         return
 
     try:
-        with open(WATCHLIST_FILE, "r", encoding="utf-8") as file:
-            watchlist = json.load(file)
+
+        with open(
+            WATCHLIST_FILE,
+            "r",
+            encoding="utf-8"
+        ) as file:
+
+            watchlist = json.load(
+                file
+            )
+
     except Exception as error:
-        print(f"❌ Could not read {WATCHLIST_FILE}: {type(error).__name__}: {error}")
+
+        print(
+            "❌ Could not read watchlist."
+        )
+
+        print(
+            f"{type(error).__name__}: "
+            f"{error}"
+        )
+
         return
 
     if not watchlist:
-        print("Watchlist is empty. Nothing to check.")
+
+        print(
+            "Watchlist is empty. "
+            "Nothing to check."
+        )
+
         return
 
-    print(f"Loaded {len(watchlist)} item(s) from watchlist.")
+    print(
+        f"Loaded {len(watchlist)} "
+        f"item(s) from watchlist."
+    )
+
+    # --------------------------------------------------------
+    # Browser
+    # --------------------------------------------------------
 
     driver = None
+
     remaining_watchlist = []
 
     try:
+
         driver = create_driver()
 
+        # ----------------------------------------------------
+        # Check each watchlist item
+        # ----------------------------------------------------
+
         for item in watchlist:
-            pbn = str(item.get("pbn", "")).strip()
-            trailer = str(item.get("trailer", "Unknown")).strip()
+
+            pbn = str(
+                item.get(
+                    "pbn",
+                    ""
+                )
+            ).strip()
+
+            trailer = str(
+                item.get(
+                    "trailer",
+                    "Unknown"
+                )
+            ).strip()
+
+            # ------------------------------------------------
+            # Missing PBN
+            # ------------------------------------------------
 
             if not pbn:
-                print("⚠️ Watchlist item has no PBN. Keeping item.")
-                remaining_watchlist.append(item)
+
+                print("")
+                print(
+                    "⚠️ Watchlist item has no PBN."
+                )
+
+                print(
+                    "Keeping it on the watchlist."
+                )
+
+                remaining_watchlist.append(
+                    item
+                )
+
                 continue
 
-            print("\n========================================")
-            print(f"Checking Trailer: {trailer}")
-            print(f"PBN: {pbn}")
-            print("========================================")
+            print("")
+            print(
+                "========================================"
+            )
+
+            print(
+                f"Trailer: {trailer}"
+            )
+
+            print(
+                f"PBN: {pbn}"
+            )
+
+            print(
+                "========================================"
+            )
 
             try:
-                driver, page_text = check_pbn_status(driver, pbn)
-                print_status_summary(page_text)
 
-                cleared, status = is_cleared(page_text)
+                # --------------------------------------------
+                # Check ROS
+                # --------------------------------------------
+
+                page_text, driver = check_pbn_status(
+                    driver,
+                    pbn
+                )
+
+                # --------------------------------------------
+                # Print response
+                # --------------------------------------------
+
+                print_status_summary(
+                    page_text
+                )
+
+                # --------------------------------------------
+                # Determine clearance
+                # --------------------------------------------
+
+                cleared, status = is_cleared(
+                    page_text
+                )
 
                 if cleared:
-                    print(f"🟢 CLEARANCE DETECTED for {trailer} ({pbn})!")
+
+                    print("")
+                    print(
+                        f"🟢 CLEARANCE DETECTED!"
+                    )
+
+                    print(
+                        f"Trailer: {trailer}"
+                    )
+
+                    print(
+                        f"PBN: {pbn}"
+                    )
+
+                    print(
+                        f"Status: {status}"
+                    )
+
+                    # ----------------------------------------
+                    # Google Chat
+                    # ----------------------------------------
+
                     if webhook_url:
+
                         send_google_chat_notification(
-                            webhook_url, trailer, pbn, status
+                            webhook_url,
+                            trailer,
+                            pbn,
+                            status
                         )
+
                     else:
-                        print("⚠️ Cleared, but webhook is missing.")
+
+                        print(
+                            "⚠️ Google Chat webhook "
+                            "is not configured."
+                        )
+
+                    # ----------------------------------------
+                    # IMPORTANT:
+                    #
+                    # Do NOT append this item to
+                    # remaining_watchlist.
+                    #
+                    # This removes it from active watching.
+                    # ----------------------------------------
+
                 else:
-                    print(f"⏳ Still pending for {trailer} ({pbn}).")
-                    remaining_watchlist.append(item)
+
+                    print("")
+                    print(
+                        f"⏳ Still pending:"
+                    )
+
+                    print(
+                        f"Trailer: {trailer}"
+                    )
+
+                    print(
+                        f"PBN: {pbn}"
+                    )
+
+                    remaining_watchlist.append(
+                        item
+                    )
 
             except Exception as error:
-                print(f"\n❌ ERROR checking PBN {pbn}")
-                print(f"Exception message: {error!r}")
+
+                print("")
+                print(
+                    f"❌ ERROR checking PBN {pbn}"
+                )
+
+                print(
+                    f"Exception type: "
+                    f"{type(error).__name__}"
+                )
+
+                print(
+                    f"Exception message: "
+                    f"{error!r}"
+                )
+
                 traceback.print_exc()
-                remaining_watchlist.append(item)
+
+                # --------------------------------------------
+                # VERY IMPORTANT:
+                #
+                # Never remove a PBN because of an error.
+                # Keep it for the next run.
+                # --------------------------------------------
+
+                remaining_watchlist.append(
+                    item
+                )
 
     except Exception as fatal_error:
-        print(f"\n❌ FATAL BROWSER ERROR: {fatal_error!r}")
+
+        print("")
+        print(
+            "❌ FATAL BROWSER ERROR"
+        )
+
+        print(
+            f"Type: "
+            f"{type(fatal_error).__name__}"
+        )
+
+        print(
+            f"Message: "
+            f"{fatal_error!r}"
+        )
+
         traceback.print_exc()
+
+        # Browser failed completely.
+        # Preserve the entire watchlist.
+
         remaining_watchlist = watchlist
 
     finally:
+
         if driver:
+
             try:
+
                 driver.quit()
-                print("Browser closed.")
+
+                print(
+                    "Browser closed."
+                )
+
             except Exception:
+
                 pass
 
-    try:
-        with open(WATCHLIST_FILE, "w", encoding="utf-8") as file:
-            json.dump(remaining_watchlist, file, indent=2, ensure_ascii=False)
+    # --------------------------------------------------------
+    # Save watchlist
+    # --------------------------------------------------------
 
-        print("\n========================================")
-        print("Watchlist updated successfully.")
-        print(f"Before: {len(watchlist)} item(s)")
-        print(f"After:  {len(remaining_watchlist)} item(s)")
-        print("========================================\n")
+    try:
+
+        with open(
+            WATCHLIST_FILE,
+            "w",
+            encoding="utf-8"
+        ) as file:
+
+            json.dump(
+                remaining_watchlist,
+                file,
+                indent=2,
+                ensure_ascii=False
+            )
+
+        print("")
+        print(
+            "========================================"
+        )
+
+        print(
+            "WATCHLIST UPDATE"
+        )
+
+        print(
+            "========================================"
+        )
+
+        print(
+            f"Before: "
+            f"{len(watchlist)} item(s)"
+        )
+
+        print(
+            f"After:  "
+            f"{len(remaining_watchlist)} item(s)"
+        )
+
+        removed = (
+            len(watchlist)
+            - len(remaining_watchlist)
+        )
+
+        print(
+            f"Removed: "
+            f"{removed} item(s)"
+        )
+
+        print(
+            "========================================"
+        )
 
     except Exception as error:
-        print(f"❌ Could not save watchlist: {type(error).__name__}: {error}")
+
+        print(
+            "❌ Could not save watchlist."
+        )
+
+        print(
+            f"{type(error).__name__}: "
+            f"{error}"
+        )
+
         raise
 
 
+# ============================================================
+# START
+# ============================================================
+
 if __name__ == "__main__":
     main()
+```
+
+**Important:** this `watcher.py` is designed to go with the updated GitHub Actions workflow I gave you in the previous message — specifically, **do not install `chromium-chromedriver` separately**. Selenium should manage the driver.
+
+Once you've replaced the file, run the Action again. The next log should tell us whether we've finally got past the Chromium problem and reached ROS.
