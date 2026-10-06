@@ -55,10 +55,12 @@ def create_driver():
     # GitHub's Ubuntu runner may install Chromium as a Snap.
     # Check the Snap location FIRST.
     chromium_paths = [
-        "/snap/bin/chromium",
-        "/usr/bin/chromium",
-        "/usr/bin/chromium-browser",
-    ]
+    "/usr/bin/google-chrome",
+    "/usr/bin/google-chrome-stable",
+    "/snap/bin/chromium",
+    "/usr/bin/chromium",
+    "/usr/bin/chromium-browser",
+]
 
     chromium_path = None
 
