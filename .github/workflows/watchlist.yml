@@ -11,7 +11,7 @@ permissions:
 jobs:
   check-watchlist:
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 5
 
     steps:
     - name: Checkout Repository
@@ -29,9 +29,12 @@ jobs:
       run: |
         python -c "import json, os; data = json.load(open('watchlist.json')) if os.path.exists('watchlist.json') else []; print('has_items=' + str(bool(data)).lower(), file=open(os.environ['GITHUB_OUTPUT'], 'a'))"
 
-    - name: Install Dependencies
+    - name: Install Dependencies & Chrome
       if: steps.check_list.outputs.has_items == 'true'
-      run: pip install requests
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y chromium-chromedriver
+        pip install selenium requests
 
     - name: Run Watcher
       if: steps.check_list.outputs.has_items == 'true'
