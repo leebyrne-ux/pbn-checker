@@ -31,25 +31,23 @@ def send_google_chat_notification(webhook_url, trailer, pbn, status_text):
         print(f"Failed to send Google Chat message: {e}")
 
 def check_pbn_status(driver, pbn_id):
-    """Queries ROS portal using Selenium and returns the full page source text."""
+    """Queries ROS portal using Selenium and returns body text."""
     driver.get(ROS_URL)
     
-    # Wait explicitly for input field to be clickable
-    input_box = WebDriverWait(driver, 20).until(
-        EC.element_to_be_clickable((By.ID, "pbn"))
-    )
+    # Wait up to 15 seconds for ROS input field to be present
+    wait = WebDriverWait(driver, 15)
+    input_box = wait.until(EC.presence_of_element_located((By.ID, "pbn")))
+    
     input_box.clear()
     input_box.send_keys(pbn_id)
     
-    submit_btn = WebDriverWait(driver, 10).until(
-        EC.element_to_be_clickable((By.ID, "submitPbn"))
-    )
-    submit_btn.click()
+    submit_btn = driver.find_element(By.ID, "submitPbn")
+    driver.execute_script("arguments[0].click();", submit_btn) # JS click to bypass overlap issues
     
-    # Give ROS time to load and populate the clearance channel container
-    time.sleep(3)
+    # Wait 4 seconds for Angular bindings and page update
+    time.sleep(4)
     
-    return driver.page_source
+    return driver.find_element(By.TAG_NAME, "body").text
 
 def main():
     webhook_url = get_google_chat_webhook()
@@ -67,12 +65,14 @@ def main():
         print("Watchlist is empty. Nothing to check.")
         return
 
-    # Configure Headless Chrome with explicit binary location
+    # Headless Chrome flags for Linux runners
     options = webdriver.ChromeOptions()
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
+    options.add_argument("--window-size=1920,1080")
+    options.add_argument("--remote-debugging-port=9222")
     options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
     options.binary_location = "/usr/bin/chromium-browser"
 
@@ -89,8 +89,10 @@ def main():
 
             try:
                 print(f"Checking status for Trailer: {trailer} | PBN: {pbn}...")
-                page_source = check_pbn_status(driver, pbn)
-                text_upper = page_source.upper()
+                page_text = check_pbn_status(driver, pbn)
+                text_upper = page_text.upper()
+                
+                print(f"Page text retrieved (length: {len(page_text)} chars)")
 
                 if "EXIT THE PORT" in text_upper or "EXIT PORT" in text_upper or "EXIT" in text_upper:
                     print(f"✅ CLEARANCE DETECTED for {trailer} ({pbn})!")
@@ -114,7 +116,7 @@ def main():
         if driver:
             driver.quit()
 
-    # Save updated watchlist (cleared items removed)
+    # Save updated watchlist
     with open("watchlist.json", "w") as f:
         json.dump(remaining_watchlist, f, indent=2)
 
