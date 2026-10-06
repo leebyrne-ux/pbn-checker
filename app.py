@@ -7,7 +7,7 @@ from github import Github
 # Page Configuration
 st.set_page_config(
     page_title="Customs PBN Batch Checker",
-    page_icon="🚚",
+    page_icon="🚛",
     layout="centered"
 )
 
@@ -34,7 +34,6 @@ def load_watchlist():
         try:
             contents = repo.get_contents("watchlist.json", ref="main")
             data = json.loads(contents.decoded_content.decode("utf-8"))
-            # Save local copy in container
             with open(LOCAL_FILE, "w") as f:
                 json.dump(data, f, indent=2)
             return data
@@ -51,11 +50,9 @@ def load_watchlist():
 
 def save_watchlist_and_commit(watchlist_data):
     """Saves watchlist locally and commits updated json directly to GitHub main branch."""
-    # 1. Save local copy in Streamlit memory
     with open(LOCAL_FILE, "w") as f:
         json.dump(watchlist_data, f, indent=2)
 
-    # 2. Push commit to GitHub
     repo = get_github_repo()
     if repo:
         try:
@@ -69,21 +66,19 @@ def save_watchlist_and_commit(watchlist_data):
                 sha=contents.sha,
                 branch="main"
             )
-            st.toast("✅ Saved & committed to GitHub!", icon="🚀")
+            st.toast("Saved and committed to GitHub!", icon="🚀")
         except Exception as e:
             st.error(f"Failed to commit to GitHub: {e}")
     else:
         st.warning("GITHUB_TOKEN or REPO_NAME missing in secrets. Saved locally only.")
 
-# --- APP UI & LOGIC ---
+# --- APP UI LOGIC ---
 
-st.title("🚚 Customs PBN Batch Checker")
-st.caption(f"🕒 Current Local Time: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
+st.title("Customs PBN Batch Checker")
+st.caption(f"Current Local Time: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
 
-# Load current active list
 current_list = load_watchlist()
 
-# Section 1: Add new PBNs
 st.subheader("Add PBNs to Watchlist")
 
 with st.form("add_pbn_form", clear_on_submit=True):
@@ -131,21 +126,10 @@ if submit_button and raw_pasted_text.strip():
 
 st.divider()
 
-# Section 2: Active Watchlist Display
-st.subheader("👁️ Active Watchlist (Auto-checking every 15 min)")
+st.subheader("Active Watchlist (Auto-checking every 15 min)")
 
 if not current_list:
     st.info("Watchlist is currently empty. Add PBNs above to start automated monitoring.")
 else:
     for idx, item in enumerate(current_list):
-        trailer = item.get("trailer", "Unknown")
-        pbn = item.get("pbn", "N/A")
-        added_at = item.get("added_at", "N/A")
-        
-        col1, col2 = st.columns([5, 1])
-        with col1:
-            st.info(f"🚛 **Trailer:** {trailer} | **PBN:** {pbn} | Added at {added_at}")
-        with col2:
-            if st.button("Delete", key=f"del_{idx}"):
-                current_list.pop(idx)
-                save_watchlist_and_commit(
+        trailer =
