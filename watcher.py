@@ -34,7 +34,6 @@ def check_pbn_status(driver, pbn_id):
     """Queries ROS portal using Selenium and returns body text."""
     driver.get(ROS_URL)
     
-    # Wait up to 15 seconds for ROS input field to be present
     wait = WebDriverWait(driver, 15)
     input_box = wait.until(EC.presence_of_element_located((By.ID, "pbn")))
     
@@ -42,17 +41,16 @@ def check_pbn_status(driver, pbn_id):
     input_box.send_keys(pbn_id)
     
     submit_btn = driver.find_element(By.ID, "submitPbn")
-    driver.execute_script("arguments[0].click();", submit_btn) # JS click to bypass overlap issues
+    driver.execute_script("arguments[0].click();", submit_btn)
     
-    # Wait 4 seconds for Angular bindings and page update
-    time.sleep(4)
+    # Allow Angular time to fetch and render channel response
+    time.sleep(5)
     
     return driver.find_element(By.TAG_NAME, "body").text
 
 def main():
     webhook_url = get_google_chat_webhook()
-    if not webhook_url:
-        print("WARNING: GOOGLE_CHAT_WEBHOOK environment variable is not set!")
+    print(f"Webhook URL presence: {'CONFIGURED' if webhook_url else 'MISSING'}")
     
     if not os.path.exists("watchlist.json"):
         print("watchlist.json not found. Exiting.")
@@ -65,7 +63,6 @@ def main():
         print("Watchlist is empty. Nothing to check.")
         return
 
-    # Headless Chrome flags for Linux runners
     options = webdriver.ChromeOptions()
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
@@ -92,9 +89,12 @@ def main():
                 page_text = check_pbn_status(driver, pbn)
                 text_upper = page_text.upper()
                 
-                print(f"Page text retrieved (length: {len(page_text)} chars)")
+                print(f"--- DEBUG PAGE TEXT FOR {pbn} ---")
+                print(page_text[:600]) # Prints top 600 characters of rendered ROS page
+                print("---------------------------------")
 
-                if "EXIT THE PORT" in text_upper or "EXIT PORT" in text_upper or "EXIT" in text_upper:
+                # Broad keyword check for clearance
+                if "EXIT THE PORT" in text_upper or "EXIT PORT" in text_upper or "EXIT" in text_upper or "GREEN" in text_upper:
                     print(f"✅ CLEARANCE DETECTED for {trailer} ({pbn})!")
                     if webhook_url:
                         send_google_chat_notification(webhook_url, trailer, pbn, "Exit the Port")
@@ -116,7 +116,6 @@ def main():
         if driver:
             driver.quit()
 
-    # Save updated watchlist
     with open("watchlist.json", "w") as f:
         json.dump(remaining_watchlist, f, indent=2)
 
