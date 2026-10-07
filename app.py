@@ -47,10 +47,10 @@ def get_repo():
         return None
 
 
-def load_watchlist():
+def load_():
     """
-    Load watchlist from GitHub.
-    Falls back to local watchlist.json if GitHub is unavailable.
+    Load  from GitHub.
+    Falls back to local .json if GitHub is unavailable.
     """
 
     repo = get_repo()
@@ -58,7 +58,7 @@ def load_watchlist():
     if repo:
         try:
             file_data = repo.get_contents(
-                WATCHLIST_FILE,
+                _FILE,
                 ref="main"
             )
 
@@ -66,7 +66,7 @@ def load_watchlist():
             data = json.loads(raw)
 
             # Keep local copy updated too
-            with open(WATCHLIST_FILE, "w", encoding="utf-8") as f:
+            with open(_FILE, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
 
             return data
@@ -75,9 +75,9 @@ def load_watchlist():
             pass
 
     # Local fallback
-    if os.path.exists(WATCHLIST_FILE):
+    if os.path.exists(_FILE):
         try:
-            with open(WATCHLIST_FILE, "r", encoding="utf-8") as f:
+            with open(_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
             return []
@@ -85,40 +85,40 @@ def load_watchlist():
     return []
 
 
-def save_watchlist(data):
+def save_(data):
     """
-    Save watchlist locally and synchronise it to GitHub.
+    Save  locally and synchronise it to GitHub.
     """
 
     # Always save a local copy
-    with open(WATCHLIST_FILE, "w", encoding="utf-8") as f:
+    with open(_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
     repo = get_repo()
 
     if not repo:
         st.warning(
-            "Watchlist saved locally, but GitHub could not be reached."
+            " saved locally, but GitHub could not be reached."
         )
         return False
 
     try:
         file_data = repo.get_contents(
-            WATCHLIST_FILE,
+            _FILE,
             ref="main"
         )
 
         body = json.dumps(data, indent=2)
 
         repo.update_file(
-            path=WATCHLIST_FILE,
-            message="Update watchlist",
+            path=_FILE,
+            message="Update ",
             content=body,
             sha=file_data.sha,
             branch="main"
         )
 
-        st.toast("Watchlist saved to GitHub!", icon="🚀")
+        st.toast(" saved to GitHub!", icon="🚀")
         return True
 
     except Exception as e:
@@ -603,117 +603,104 @@ if st.session_state.results:
     # WATCHLIST SELECTION
     # ========================================================
 
-    if call_to_customs:
+    # ========================================================
+# WATCHLIST ACTIONS
+# ========================================================
 
-        st.subheader("3. Add CALL TO CUSTOMS PBNs to Watchlist")
+if call_to_customs:
 
-        st.info(
-            "Select the PBNs you want the 15-minute GitHub watcher "
-            "to monitor. Nothing is added automatically."
-        )
+    st.subheader("Add to Watchlist")
 
-        selections = {}
+    st.info(
+        "PBNs showing CALL TO CUSTOMS can be added to the "
+        "15-minute watchlist with one click."
+    )
 
-        for result in call_to_customs:
+    # Get the latest watchlist from GitHub
+    current_watchlist = load_watchlist()
 
-            pbn = result["PBN ID"]
-            trailer = result.get("Trailer", "Unknown")
+    existing_pbns = {
+        str(item.get("pbn", "")).upper()
+        for item in current_watchlist
+    }
 
-            label = f"{pbn}"
+    for result in call_to_customs:
+
+        pbn = result["PBN ID"].upper()
+        trailer = result.get("Trailer", "Unknown")
+
+        col1, col2 = st.columns([5, 2])
+
+        with col1:
 
             if trailer and trailer != "Unknown":
-                label += f" — {trailer}"
+                st.write(
+                    f"**{pbn}** — {trailer}"
+                )
+            else:
+                st.write(
+                    f"**{pbn}**"
+                )
 
-            selections[pbn] = st.checkbox(
-                label,
-                key=f"watch_{pbn}"
-            )
+            st.caption("🛑 CALL TO CUSTOMS")
 
-        if st.button(
-            "👁️ Add Selected to Watchlist",
-            type="primary",
-            use_container_width=True
-        ):
+        with col2:
 
-            selected = [
-                result
-                for result in call_to_customs
-                if selections.get(result["PBN ID"], False)
-            ]
+            # Already being watched
+            if pbn in existing_pbns:
 
-            if not selected:
-
-                st.warning(
-                    "Please select at least one PBN."
+                st.success(
+                    "✅ On Watchlist"
                 )
 
             else:
 
-                # Reload the latest version from GitHub before modifying it.
-                # This avoids relying on an old copy in Streamlit's session.
-                current_watchlist = load_watchlist()
+                if st.button(
+                    "👁️ Add to Watchlist",
+                    key=f"add_watch_{pbn}",
+                    use_container_width=True
+                ):
 
-                existing_pbns = {
-                    str(item.get("pbn", "")).upper()
-                    for item in current_watchlist
-                }
+                    # Reload the latest version immediately before saving
+                    # in case the GitHub watchlist changed elsewhere.
+                    latest_watchlist = load_watchlist()
 
-                added = 0
-                already_there = 0
+                    latest_pbns = {
+                        str(item.get("pbn", "")).upper()
+                        for item in latest_watchlist
+                    }
 
-                timestamp = datetime.now().strftime(
-                    "%d/%m/%Y %H:%M:%S"
-                )
+                    if pbn in latest_pbns:
 
-                for result in selected:
-
-                    pbn = result["PBN ID"].upper()
-                    trailer = result.get(
-                        "Trailer",
-                        "Unknown"
-                    )
-
-                    if pbn in existing_pbns:
-
-                        already_there += 1
-                        continue
-
-                    current_watchlist.append(
-                        {
-                            "pbn": pbn,
-                            "trailer": trailer,
-                            "added_at": timestamp
-                        }
-                    )
-
-                    existing_pbns.add(pbn)
-                    added += 1
-
-                if added > 0:
-
-                    if save_watchlist(
-                        current_watchlist
-                    ):
-
-                        st.success(
-                            f"Added {added} PBN(s) to the watchlist."
+                        st.info(
+                            f"{pbn} is already on the watchlist."
                         )
 
-                        if already_there:
-                            st.info(
-                                f"{already_there} selected PBN(s) "
-                                "were already being watched."
+                    else:
+
+                        timestamp = datetime.now().strftime(
+                            "%d/%m/%Y %H:%M:%S"
+                        )
+
+                        latest_watchlist.append(
+                            {
+                                "pbn": pbn,
+                                "trailer": trailer,
+                                "added_at": timestamp
+                            }
+                        )
+
+                        if save_watchlist(
+                            latest_watchlist
+                        ):
+
+                            st.success(
+                                f"{pbn} added to watchlist."
                             )
 
-                        # Clear selections by rerunning
-                        st.rerun()
-
-                elif already_there:
-
-                    st.info(
-                        "All selected PBNs are already "
-                        "on the watchlist."
-                    )
+                            # Refresh the page so the button becomes
+                            # "On Watchlist".
+                            st.rerun()
 
 
 # ============================================================
