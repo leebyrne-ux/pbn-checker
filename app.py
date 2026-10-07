@@ -32,9 +32,7 @@ st.set_page_config(
 FILE = "watchlist.json"
 
 ROS_URL = (
-    "https://www.ros.ie/"
-    "customs-roro-control-web/"
-    "ros/pbn/status"
+    "https://www.ros.ie/customs-roro-control-web/ros/freight/lookup"
 )
 
 PAGE_LOAD_TIMEOUT = 45
