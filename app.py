@@ -47,10 +47,10 @@ def get_repo():
         return None
 
 
-def load_():
+def load_data():
     """
-    Load  from GitHub.
-    Falls back to local .json if GitHub is unavailable.
+    Load watchlist from GitHub.
+    Falls back to local watchlist.json if GitHub is unavailable.
     """
 
     repo = get_repo()
@@ -58,7 +58,7 @@ def load_():
     if repo:
         try:
             file_data = repo.get_contents(
-                _FILE,
+                WATCHLIST_FILE,
                 ref="main"
             )
 
@@ -66,7 +66,7 @@ def load_():
             data = json.loads(raw)
 
             # Keep local copy updated too
-            with open(_FILE, "w", encoding="utf-8") as f:
+            with open(WATCHLIST_FILE, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
 
             return data
@@ -75,9 +75,9 @@ def load_():
             pass
 
     # Local fallback
-    if os.path.exists(_FILE):
+    if os.path.exists(WATCHLIST_FILE):
         try:
-            with open(_FILE, "r", encoding="utf-8") as f:
+            with open(WATCHLIST_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
             return []
@@ -85,40 +85,40 @@ def load_():
     return []
 
 
-def save_(data):
+def save_data(data):
     """
-    Save  locally and synchronise it to GitHub.
+    Save watchlist locally and synchronise it to GitHub.
     """
 
     # Always save a local copy
-    with open(_FILE, "w", encoding="utf-8") as f:
+    with open(WATCHLIST_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
     repo = get_repo()
 
     if not repo:
         st.warning(
-            " saved locally, but GitHub could not be reached."
+            "Watchlist saved locally, but GitHub could not be reached."
         )
         return False
 
     try:
         file_data = repo.get_contents(
-            _FILE,
+            WATCHLIST_FILE,
             ref="main"
         )
 
         body = json.dumps(data, indent=2)
 
         repo.update_file(
-            path=_FILE,
-            message="Update ",
+            path=WATCHLIST_FILE,
+            message="Update watchlist",
             content=body,
             sha=file_data.sha,
             branch="main"
         )
 
-        st.toast(" saved to GitHub!", icon="🚀")
+        st.toast("Watchlist saved to GitHub!", icon="🚀")
         return True
 
     except Exception as e:
@@ -133,7 +133,6 @@ def save_(data):
 def create_driver():
     """
     Create a headless Chrome browser.
-    This follows the same setup as the working version of the app.
     """
 
     options = webdriver.ChromeOptions()
@@ -144,8 +143,9 @@ def create_driver():
     options.add_argument("--disable-gpu")
     options.add_argument("--window-size=1920,1080")
 
-    # Helps Chrome run in hosted environments
-    options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_argument(
+        "--disable-blink-features=AutomationControlled"
+    )
 
     driver = webdriver.Chrome(options=options)
 
@@ -177,7 +177,6 @@ def find_pbn_input(driver):
     blindly assume input[0] is always the correct one.
     """
 
-    # First try inputs whose attributes mention PBN
     inputs = driver.find_elements(By.TAG_NAME, "input")
 
     for element in inputs:
@@ -198,8 +197,7 @@ def find_pbn_input(driver):
         except Exception:
             continue
 
-    # Fallback: first visible/enabled input.
-    # This preserves the behaviour of the previously working script.
+    # Fallback to first visible input
     visible_inputs = get_visible_inputs(driver)
 
     if visible_inputs:
@@ -215,7 +213,7 @@ def click_get_channel(driver):
 
     wait = WebDriverWait(driver, 10)
 
-    # Try button text first
+    # Try button text
     try:
         button = wait.until(
             EC.element_to_be_clickable(
@@ -237,7 +235,7 @@ def click_get_channel(driver):
     except Exception:
         pass
 
-    # Some versions of the site may render the control as an input
+    # Try input value
     try:
         button = wait.until(
             EC.element_to_be_clickable(
@@ -262,10 +260,7 @@ def click_get_channel(driver):
 
 def extract_trailer_number(page_text):
     """
-    Attempt to extract the vehicle registration / trailer number
-    from the returned Revenue page.
-
-    Revenue page wording can vary, so several patterns are checked.
+    Attempt to extract the vehicle registration / trailer number.
     """
 
     lines = [
@@ -278,9 +273,8 @@ def extract_trailer_number(page_text):
 
         upper = line.upper()
 
-        # Example:
-        # Trailer Number: GTC415
         if "TRAILER NUMBER" in upper:
+
             if ":" in line:
                 value = line.split(":", 1)[1].strip()
 
@@ -293,9 +287,8 @@ def extract_trailer_number(page_text):
                 if next_line:
                     return next_line
 
-        # Example:
-        # Vehicle Registration: 241-D-12345
         if "VEHICLE REGISTRATION" in upper:
+
             if ":" in line:
                 value = line.split(":", 1)[1].strip()
 
@@ -314,10 +307,6 @@ def extract_trailer_number(page_text):
 def determine_status(page_text):
     """
     Determine the Revenue channel result.
-
-    Important:
-    We deliberately look for the complete phrases rather than
-    simply searching for 'EXIT', which could produce false matches.
     """
 
     text = page_text.upper()
@@ -349,7 +338,6 @@ def check_pbn(driver, pbn):
 
     wait = WebDriverWait(driver, 15)
 
-    # Wait for the page to load enough to expose the PBN input
     wait.until(
         lambda d: len(get_visible_inputs(d)) > 0
     )
@@ -365,19 +353,14 @@ def check_pbn(driver, pbn):
             "Status": "❌ Error finding PBN input"
         }
 
-    # Clear and enter PBN
     pbn_input.clear()
     pbn_input.send_keys(pbn)
 
-    # Click the actual Revenue button
     clicked = click_get_channel(driver)
 
     if not clicked:
-        # Fallback to ENTER, which was used successfully
-        # in the original working script.
         pbn_input.send_keys("\n")
 
-    # Give Revenue time to return the result
     time.sleep(2)
 
     try:
@@ -404,7 +387,7 @@ st.title("🚛 Customs PBN Batch Checker")
 
 st.write(
     "Paste your PBN list below, check them against Revenue, "
-    "and choose which CALL TO CUSTOMS entries should be watched."
+    "and add CALL TO CUSTOMS entries to the watchlist."
 )
 
 st.caption(
@@ -419,9 +402,6 @@ st.caption(
 
 if "results" not in st.session_state:
     st.session_state.results = []
-
-if "check_complete" not in st.session_state:
-    st.session_state.check_complete = False
 
 
 # ============================================================
@@ -453,10 +433,11 @@ if st.button(
         if p.strip()
     ]
 
-    # Remove duplicate PBNs while preserving order
+    # Remove duplicates
     pbn_list = list(dict.fromkeys(pbn_list))
 
     if not pbn_list:
+
         st.warning("Please paste at least one PBN.")
 
     else:
@@ -470,7 +451,9 @@ if st.button(
 
         try:
 
-            status_text.text("Starting Revenue browser...")
+            status_text.text(
+                "Starting Revenue browser..."
+            )
 
             driver = create_driver()
 
@@ -506,7 +489,6 @@ if st.button(
                 )
 
             st.session_state.results = results
-            st.session_state.check_complete = True
 
             status_text.empty()
             progress_bar.empty()
@@ -518,7 +500,6 @@ if st.button(
         except Exception as e:
 
             st.session_state.results = []
-            st.session_state.check_complete = False
 
             progress_bar.empty()
             status_text.empty()
@@ -551,19 +532,20 @@ if st.session_state.results:
     results = st.session_state.results
 
     # Summary counts
+
     call_to_customs = [
         r for r in results
-        if r["Status"] == "🛑 CALL TO CUSTOMS"
+        if r.get("Status") == "🛑 CALL TO CUSTOMS"
     ]
 
     cleared = [
         r for r in results
-        if r["Status"] == "✅ EXIT THE PORT"
+        if r.get("Status") == "✅ EXIT THE PORT"
     ]
 
     invalid = [
         r for r in results
-        if r["Status"] == "❌ INVALID PBN"
+        if r.get("Status") == "❌ INVALID PBN"
     ]
 
     col1, col2, col3, col4 = st.columns(4)
@@ -592,7 +574,8 @@ if st.session_state.results:
             len(invalid)
         )
 
-    # Display full results
+    # Full results table
+
     st.dataframe(
         results,
         use_container_width=True,
@@ -600,112 +583,108 @@ if st.session_state.results:
     )
 
     # ========================================================
-    # WATCHLIST SELECTION
+    # ONE-CLICK WATCHLIST ACTION
     # ========================================================
 
-    # ========================================================
-# WATCHLIST ACTIONS
-# ========================================================
+    if call_to_customs:
 
-# ========================================================
-# WATCHLIST ACTIONS
-# ========================================================
+        st.subheader("Add to Watchlist")
 
-# Find CALL TO CUSTOMS results from the completed checks
-call_to_customs = [
-    result
-    for result in st.session_state.results
-    if result.get("Status") == "🛑 CALL TO CUSTOMS"
-]
+        st.info(
+            "CALL TO CUSTOMS PBNs can be added to the "
+            "15-minute watchlist with one click."
+        )
 
-if call_to_customs:
+        # Get current watchlist
+        current_watchlist = load_data()
 
-    st.subheader("Add to Watchlist")
+        existing_pbns = {
+            str(item.get("pbn", "")).upper()
+            for item in current_watchlist
+        }
 
-    st.info(
-        "PBNs showing CALL TO CUSTOMS can be added to the "
-        "15-minute watchlist with one click."
-    )
+        for result in call_to_customs:
 
-    # Get the latest watchlist from GitHub
-    current_watchlist = load_watchlist()
+            pbn = result["PBN ID"].upper()
+            trailer = result.get(
+                "Trailer",
+                "Unknown"
+            )
 
-    existing_pbns = {
-        str(item.get("pbn", "")).upper()
-        for item in current_watchlist
-    }
+            col1, col2 = st.columns([5, 2])
 
-    for result in call_to_customs:
+            with col1:
 
-        pbn = result["PBN ID"].upper()
-        trailer = result.get("Trailer", "Unknown")
+                if trailer and trailer != "Unknown":
 
-        col1, col2 = st.columns([5, 2])
+                    st.write(
+                        f"**{pbn}** — {trailer}"
+                    )
 
-        with col1:
+                else:
 
-            if trailer and trailer != "Unknown":
-                st.write(
-                    f"**{pbn}** — {trailer}"
-                )
-            else:
-                st.write(
-                    f"**{pbn}**"
+                    st.write(
+                        f"**{pbn}**"
+                    )
+
+                st.caption(
+                    "🛑 CALL TO CUSTOMS"
                 )
 
-            st.caption("🛑 CALL TO CUSTOMS")
+            with col2:
 
-        with col2:
+                if pbn in existing_pbns:
 
-            if pbn in existing_pbns:
+                    st.success(
+                        "✅ On Watchlist"
+                    )
 
-                st.success("✅ On Watchlist")
+                else:
 
-            else:
+                    if st.button(
+                        "👁️ Add to Watchlist",
+                        key=f"add_watch_{pbn}",
+                        use_container_width=True
+                    ):
 
-                if st.button(
-                    "👁️ Add to Watchlist",
-                    key=f"add_watch_{pbn}",
-                    use_container_width=True
-                ):
+                        # Reload the latest GitHub version
+                        latest_watchlist = load_data()
 
-                    # Reload the latest version immediately before saving
-                    latest_watchlist = load_watchlist()
+                        latest_pbns = {
+                            str(item.get("pbn", "")).upper()
+                            for item in latest_watchlist
+                        }
 
-                    latest_pbns = {
-                        str(item.get("pbn", "")).upper()
-                        for item in latest_watchlist
-                    }
+                        if pbn in latest_pbns:
 
-                    if pbn in latest_pbns:
-
-                        st.info(
-                            f"{pbn} is already on the watchlist."
-                        )
-
-                    else:
-
-                        timestamp = datetime.now().strftime(
-                            "%d/%m/%Y %H:%M:%S"
-                        )
-
-                        latest_watchlist.append(
-                            {
-                                "pbn": pbn,
-                                "trailer": trailer,
-                                "added_at": timestamp
-                            }
-                        )
-
-                        if save_watchlist(
-                            latest_watchlist
-                        ):
-
-                            st.success(
-                                f"{pbn} added to watchlist."
+                            st.info(
+                                f"{pbn} is already "
+                                "on the watchlist."
                             )
 
-                            st.rerun()
+                        else:
+
+                            timestamp = datetime.now().strftime(
+                                "%d/%m/%Y %H:%M:%S"
+                            )
+
+                            latest_watchlist.append(
+                                {
+                                    "pbn": pbn,
+                                    "trailer": trailer,
+                                    "added_at": timestamp
+                                }
+                            )
+
+                            if save_data(
+                                latest_watchlist
+                            ):
+
+                                st.success(
+                                    f"{pbn} added to watchlist."
+                                )
+
+                                st.rerun()
 
 
 # ============================================================
@@ -716,7 +695,7 @@ st.divider()
 
 st.subheader("👁️ Active Watchlist")
 
-items = load_watchlist()
+items = load_data()
 
 if not items:
 
@@ -727,8 +706,8 @@ if not items:
 else:
 
     st.caption(
-        f"{len(items)} PBN(s) currently being monitored by "
-        "the GitHub watcher."
+        f"{len(items)} PBN(s) currently being monitored "
+        "by the GitHub watcher."
     )
 
     for idx, item in enumerate(items):
@@ -766,8 +745,8 @@ else:
                 use_container_width=True
             ):
 
-                # Reload latest GitHub copy before deleting
-                latest_items = load_watchlist()
+                # Reload latest GitHub copy
+                latest_items = load_data()
 
                 # Remove matching PBN
                 latest_items = [
@@ -776,7 +755,7 @@ else:
                     != str(pbn).upper()
                 ]
 
-                save_watchlist(
+                save_data(
                     latest_items
                 )
 
