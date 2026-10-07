@@ -1,10 +1,9 @@
+```python
 import os
 import json
 import time
-import shutil
-import traceback
-
 import streamlit as st
+
 from datetime import datetime
 from github import Github
 
@@ -15,79 +14,71 @@ from selenium.webdriver.support import expected_conditions as EC
 
 
 # ============================================================
-# PAGE CONFIG
+# SETTINGS
 # ============================================================
 
 st.set_page_config(
-    page_title="PBN Checker",
-    page_icon="🚚",
+    page_title="Team PBN Checker",
+    page_icon="🚛",
     layout="centered"
 )
 
-
-# ============================================================
-# CONFIGURATION
-# ============================================================
-
-FILE = "watchlist.json"
-
-ROS_URL = (
-    "https://www.ros.ie/customs-roro-control-web/ros/freight/lookup"
-)
-
-PAGE_LOAD_TIMEOUT = 45
-RESULT_WAIT_TIMEOUT = 30
+ROS_URL = "https://www.ros.ie/customs-roro-control-web/ros/freight/lookup"
+WATCHLIST_FILE = "watchlist.json"
 
 
 # ============================================================
-# GITHUB
+# GITHUB FUNCTIONS
 # ============================================================
 
 def get_repo():
-    tok = st.secrets.get("GITHUB_TOKEN")
-    name = st.secrets.get("REPO_NAME")
+    """Connect to the GitHub repository using Streamlit secrets."""
 
-    if tok and name:
-        try:
-            return Github(tok).get_repo(name)
-        except Exception as e:
-            st.error(f"GitHub Error: {e}")
+    token = st.secrets.get("GITHUB_TOKEN")
+    repo_name = st.secrets.get("REPO_NAME")
 
-    return None
+    if not token or not repo_name:
+        return None
+
+    try:
+        github = Github(token)
+        return github.get_repo(repo_name)
+    except Exception as e:
+        st.error(f"GitHub connection error: {e}")
+        return None
 
 
-def load_data():
+def load_watchlist():
     """
-    Load watchlist from GitHub first.
-    Fall back to local watchlist.json if GitHub is unavailable.
+    Load watchlist from GitHub.
+    Falls back to local watchlist.json if GitHub is unavailable.
     """
 
     repo = get_repo()
 
     if repo:
         try:
-            res = repo.get_contents(FILE, ref="main")
+            file_data = repo.get_contents(
+                WATCHLIST_FILE,
+                ref="main"
+            )
 
-            raw = res.decoded_content.decode("utf-8")
+            raw = file_data.decoded_content.decode("utf-8")
             data = json.loads(raw)
 
-            # Keep local copy in sync.
-            with open(FILE, "w", encoding="utf-8") as f:
-                json.dump(
-                    data,
-                    f,
-                    indent=2,
-                    ensure_ascii=False
-                )
+            # Keep local copy updated too
+            with open(WATCHLIST_FILE, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
 
             return data
 
         except Exception:
             pass
 
-    if os.path.exists(FILE):
+    # Local fallback
+    if os.path.exists(WATCHLIST_FILE):
         try:
-            with open(FILE, "r", encoding="utf-8") as f:
+            with open(WATCHLIST_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
             return []
@@ -95,736 +86,646 @@ def load_data():
     return []
 
 
-def save_data(data):
+def save_watchlist(data):
     """
     Save watchlist locally and synchronise it to GitHub.
     """
 
-    with open(FILE, "w", encoding="utf-8") as f:
-        json.dump(
-            data,
-            f,
-            indent=2,
-            ensure_ascii=False
-        )
+    # Always save a local copy
+    with open(WATCHLIST_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
 
     repo = get_repo()
 
-    if repo:
-        try:
-            res = repo.get_contents(FILE, ref="main")
+    if not repo:
+        st.warning(
+            "Watchlist saved locally, but GitHub could not be reached."
+        )
+        return False
 
-            body = json.dumps(
-                data,
-                indent=2,
-                ensure_ascii=False
-            )
+    try:
+        file_data = repo.get_contents(
+            WATCHLIST_FILE,
+            ref="main"
+        )
 
-            repo.update_file(
-                path=FILE,
-                message="Update watchlist",
-                content=body,
-                sha=res.sha,
-                branch="main"
-            )
+        body = json.dumps(data, indent=2)
 
-            st.toast(
-                "Saved to GitHub!",
-                icon="🚀"
-            )
+        repo.update_file(
+            path=WATCHLIST_FILE,
+            message="Update watchlist",
+            content=body,
+            sha=file_data.sha,
+            branch="main"
+        )
 
-        except Exception as e:
-            st.error(f"Sync error: {e}")
+        st.toast("Watchlist saved to GitHub!", icon="🚀")
+        return True
+
+    except Exception as e:
+        st.error(f"GitHub sync error: {e}")
+        return False
 
 
 # ============================================================
-# BROWSER
+# SELENIUM / REVENUE FUNCTIONS
 # ============================================================
-
-def find_browser():
-    """
-    Find Chrome/Chromium in Streamlit's environment.
-    """
-
-    possible_paths = [
-        shutil.which("google-chrome"),
-        shutil.which("google-chrome-stable"),
-        shutil.which("chromium"),
-        shutil.which("chromium-browser"),
-        "/usr/bin/google-chrome",
-        "/usr/bin/google-chrome-stable",
-        "/usr/bin/chromium",
-        "/usr/bin/chromium-browser",
-        "/snap/bin/chromium",
-    ]
-
-    for path in possible_paths:
-        if path and os.path.exists(path):
-            return path
-
-    return None
-
 
 def create_driver():
     """
-    Create a headless Chrome/Chromium Selenium driver.
+    Create a headless Chrome browser.
+    This follows the same setup as the working version of the app.
     """
 
     options = webdriver.ChromeOptions()
 
-    browser_path = find_browser()
-
-    if browser_path:
-        options.binary_location = browser_path
-
-    options.add_argument("--headless=new")
+    options.add_argument("--headless")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
     options.add_argument("--window-size=1920,1080")
 
-    options.add_argument("--disable-extensions")
-    options.add_argument("--disable-background-networking")
-    options.add_argument("--disable-default-apps")
-    options.add_argument("--disable-sync")
-    options.add_argument("--no-first-run")
-    options.add_argument("--no-default-browser-check")
-
-    options.add_argument(
-        "--user-agent="
-        "Mozilla/5.0 (X11; Linux x86_64) "
-        "AppleWebKit/537.36 "
-        "(KHTML, like Gecko) "
-        "Chrome/155.0.0.0 Safari/537.36"
-    )
+    # Helps Chrome run in hosted environments
+    options.add_argument("--disable-blink-features=AutomationControlled")
 
     driver = webdriver.Chrome(options=options)
-
-    driver.set_page_load_timeout(
-        PAGE_LOAD_TIMEOUT
-    )
 
     return driver
 
 
-# ============================================================
-# REVENUE PAGE HELPERS
-# ============================================================
+def get_visible_inputs(driver):
+    """Return visible/enabled input elements."""
+
+    inputs = driver.find_elements(By.TAG_NAME, "input")
+
+    visible_inputs = []
+
+    for element in inputs:
+        try:
+            if element.is_displayed() and element.is_enabled():
+                visible_inputs.append(element)
+        except Exception:
+            continue
+
+    return visible_inputs
+
 
 def find_pbn_input(driver):
     """
-    Locate the visible PBN input on Revenue's PBN Status page.
+    Find the visible PBN input.
+
+    Revenue's current page contains multiple inputs, so we don't
+    blindly assume input[0] is always the correct one.
     """
 
-    selectors = [
-        "input[name*='pbn' i]",
-        "input[id*='pbn' i]",
-        "input[placeholder*='PBN' i]",
-    ]
+    # First try inputs whose attributes mention PBN
+    inputs = driver.find_elements(By.TAG_NAME, "input")
 
-    for selector in selectors:
-
+    for element in inputs:
         try:
-            elements = driver.find_elements(
-                By.CSS_SELECTOR,
-                selector
-            )
+            if not element.is_displayed() or not element.is_enabled():
+                continue
 
-            for element in elements:
+            attributes = " ".join([
+                element.get_attribute("id") or "",
+                element.get_attribute("name") or "",
+                element.get_attribute("placeholder") or "",
+                element.get_attribute("aria-label") or ""
+            ]).upper()
 
-                if (
-                    element.is_displayed()
-                    and element.is_enabled()
-                ):
-                    return element
-
-        except Exception:
-            pass
-
-    # Fallback to visible text input.
-    try:
-
-        elements = driver.find_elements(
-            By.XPATH,
-            "//input[not(@type='hidden')]"
-        )
-
-        for element in elements:
-
-            if (
-                element.is_displayed()
-                and element.is_enabled()
-            ):
+            if "PBN" in attributes:
                 return element
 
-    except Exception:
-        pass
+        except Exception:
+            continue
+
+    # Fallback: first visible/enabled input.
+    # This preserves the behaviour of the previously working script.
+    visible_inputs = get_visible_inputs(driver)
+
+    if visible_inputs:
+        return visible_inputs[0]
 
     return None
 
 
-def find_check_button(driver):
+def click_get_channel(driver):
     """
-    Locate Revenue's 'Check Status' button.
+    Find and click Revenue's 'Get your Channel' button.
     """
 
-    xpath = (
-        "//button[contains("
-        "translate(normalize-space(.), "
-        "'ABCDEFGHIJKLMNOPQRSTUVWXYZ', "
-        "'abcdefghijklmnopqrstuvwxyz'), "
-        "'check status'"
-        ")]"
-    )
+    wait = WebDriverWait(driver, 10)
 
+    # Try button text first
     try:
-
-        return WebDriverWait(
-            driver,
-            RESULT_WAIT_TIMEOUT
-        ).until(
+        button = wait.until(
             EC.element_to_be_clickable(
-                (By.XPATH, xpath)
+                (
+                    By.XPATH,
+                    "//button[contains("
+                    "translate(normalize-space(.),"
+                    "'ABCDEFGHIJKLMNOPQRSTUVWXYZ',"
+                    "'abcdefghijklmnopqrstuvwxyz'),"
+                    "'get your channel'"
+                    ")]"
+                )
             )
         )
 
+        button.click()
+        return True
+
     except Exception:
-        return None
+        pass
+
+    # Some versions of the site may render the control as an input
+    try:
+        button = wait.until(
+            EC.element_to_be_clickable(
+                (
+                    By.XPATH,
+                    "//input[contains("
+                    "translate(@value,"
+                    "'ABCDEFGHIJKLMNOPQRSTUVWXYZ',"
+                    "'abcdefghijklmnopqrstuvwxyz'),"
+                    "'get your channel'"
+                    ")]"
+                )
+            )
+        )
+
+        button.click()
+        return True
+
+    except Exception:
+        return False
 
 
-def normalise_text(text):
-    return " ".join(
-        text.upper().split()
-    )
-
-
-def get_status_from_page(text):
+def extract_trailer_number(page_text):
     """
-    Interpret the Revenue PBN Status response.
+    Attempt to extract the vehicle registration / trailer number
+    from the returned Revenue page.
 
-    The important status for this app is CALL TO CUSTOMS.
-
-    Other statuses are retained as informational results.
+    Revenue page wording can vary, so several patterns are checked.
     """
 
-    upper = normalise_text(text)
-
-    # Most important first.
-    if "CALL TO CUSTOMS" in upper:
-        return "CALL TO CUSTOMS"
-
-    if "CALLED TO CUSTOMS" in upper:
-        return "CALL TO CUSTOMS"
-
-    if "EXIT THE PORT" in upper:
-        return "EXIT THE PORT"
-
-    if "CHECKED IN" in upper:
-        return "CHECKED IN"
-
-    if "PROCEED" in upper:
-        return "PROCEED"
-
-    # Try to identify a generic status line.
     lines = [
         line.strip()
-        for line in text.splitlines()
+        for line in page_text.splitlines()
         if line.strip()
     ]
 
     for index, line in enumerate(lines):
 
-        upper_line = line.upper()
+        upper = line.upper()
 
-        if upper_line == "PBN STATUS":
+        # Example:
+        # Trailer Number: GTC415
+        if "TRAILER NUMBER" in upper:
+            if ":" in line:
+                value = line.split(":", 1)[1].strip()
+
+                if value:
+                    return value
 
             if index + 1 < len(lines):
-                return lines[index + 1]
+                next_line = lines[index + 1].strip()
 
-    return "UNKNOWN"
+                if next_line:
+                    return next_line
+
+        # Example:
+        # Vehicle Registration: 241-D-12345
+        if "VEHICLE REGISTRATION" in upper:
+            if ":" in line:
+                value = line.split(":", 1)[1].strip()
+
+                if value:
+                    return value
+
+            if index + 1 < len(lines):
+                next_line = lines[index + 1].strip()
+
+                if next_line:
+                    return next_line
+
+    return "Unknown"
 
 
-# ============================================================
-# CHECK ONE PBN
-# ============================================================
+def determine_status(page_text):
+    """
+    Determine the Revenue channel result.
+
+    Important:
+    We deliberately look for the complete phrases rather than
+    simply searching for 'EXIT', which could produce false matches.
+    """
+
+    text = page_text.upper()
+
+    if "INVALID PBN" in text:
+        return "❌ INVALID PBN"
+
+    if "CALL TO CUSTOMS" in text:
+        return "🛑 CALL TO CUSTOMS"
+
+    if "ORANGE" in text:
+        return "🛑 CALL TO CUSTOMS"
+
+    if "EXIT THE PORT" in text:
+        return "✅ EXIT THE PORT"
+
+    if "NOT READY" in text:
+        return "⏳ CHANNEL NOT READY"
+
+    return "❓ CHECK MANUALLY"
+
 
 def check_pbn(driver, pbn):
     """
-    Check one PBN on Revenue.
-
-    Returns:
-        {
-            "pbn": "...",
-            "status": "...",
-            "raw_text": "..."
-        }
+    Check one PBN against Revenue Customs Channel Lookup.
     """
 
     driver.get(ROS_URL)
 
-    # Wait for page.
-    WebDriverWait(
-        driver,
-        RESULT_WAIT_TIMEOUT
-    ).until(
-        lambda d:
-        d.execute_script(
-            "return document.readyState"
-        ) == "complete"
+    wait = WebDriverWait(driver, 15)
+
+    # Wait for the page to load enough to expose the PBN input
+    wait.until(
+        lambda d: len(get_visible_inputs(d)) > 0
     )
 
-    # Find PBN input.
-    pbn_input = WebDriverWait(
-        driver,
-        RESULT_WAIT_TIMEOUT
-    ).until(
-        lambda d: find_pbn_input(d)
-    )
+    time.sleep(1)
 
-    if not pbn_input:
-        raise RuntimeError(
-            "Could not find PBN input."
-        )
+    pbn_input = find_pbn_input(driver)
 
-    pbn_input.click()
+    if pbn_input is None:
+        return {
+            "PBN ID": pbn,
+            "Trailer": "N/A",
+            "Status": "❌ Error finding PBN input"
+        }
+
+    # Clear and enter PBN
     pbn_input.clear()
     pbn_input.send_keys(pbn)
 
-    # Find Check Status button.
-    button = find_check_button(driver)
+    # Click the actual Revenue button
+    clicked = click_get_channel(driver)
 
-    if not button:
-        raise RuntimeError(
-            "Could not find 'Check Status' button."
-        )
+    if not clicked:
+        # Fallback to ENTER, which was used successfully
+        # in the original working script.
+        pbn_input.send_keys("\n")
 
-    # JavaScript click is slightly more robust with ROS.
-    driver.execute_script(
-        "arguments[0].click();",
-        button
-    )
+    # Give Revenue time to return the result
+    time.sleep(2)
 
-    # --------------------------------------------------------
-    # Wait for Revenue result
-    # --------------------------------------------------------
+    try:
+        body = driver.find_element(By.TAG_NAME, "body")
+        page_text = body.text
+    except Exception:
+        page_text = ""
 
-    def result_loaded(d):
-
-        try:
-            text = d.find_element(
-                By.TAG_NAME,
-                "body"
-            ).text
-
-            upper = normalise_text(text)
-
-            indicators = [
-                "CALL TO CUSTOMS",
-                "CALLED TO CUSTOMS",
-                "EXIT THE PORT",
-                "CHECKED IN",
-                "PBN STATUS",
-                "PBN ID",
-            ]
-
-            return any(
-                indicator in upper
-                for indicator in indicators
-            )
-
-        except Exception:
-            return False
-
-    WebDriverWait(
-        driver,
-        RESULT_WAIT_TIMEOUT
-    ).until(result_loaded)
-
-    # Give Revenue a moment to finish rendering.
-    time.sleep(0.5)
-
-    body_text = driver.find_element(
-        By.TAG_NAME,
-        "body"
-    ).text.strip()
-
-    status = get_status_from_page(
-        body_text
-    )
+    trailer_number = extract_trailer_number(page_text)
+    status = determine_status(page_text)
 
     return {
-        "pbn": pbn,
-        "status": status,
-        "raw_text": body_text,
+        "PBN ID": pbn,
+        "Trailer": trailer_number,
+        "Status": status
     }
-
-
-# ============================================================
-# PARSE INPUT
-# ============================================================
-
-def parse_pbn_input(txt):
-    """
-    Accept:
-
-        RX23VN92
-
-    or:
-
-        GTC415 RX23VN92
-
-    or:
-
-        GTC415,RX23VN92
-
-    Returns a list of:
-        {
-            "trailer": "...",
-            "pbn": "..."
-        }
-    """
-
-    results = []
-
-    for line in txt.strip().splitlines():
-
-        line = line.strip()
-
-        if not line:
-            continue
-
-        parts = (
-            line
-            .replace(",", " ")
-            .split()
-        )
-
-        if len(parts) == 1:
-
-            pbn = parts[0].strip().upper()
-
-            results.append({
-                "trailer": "Unknown",
-                "pbn": pbn,
-            })
-
-        else:
-
-            trailer = parts[0].strip().upper()
-            pbn = parts[1].strip().upper()
-
-            results.append({
-                "trailer": trailer,
-                "pbn": pbn,
-            })
-
-    return results
-
-
-# ============================================================
-# SESSION STATE
-# ============================================================
-
-if "check_results" not in st.session_state:
-    st.session_state.check_results = []
-
-if "check_errors" not in st.session_state:
-    st.session_state.check_errors = []
 
 
 # ============================================================
 # PAGE HEADER
 # ============================================================
 
-st.title("Customs PBN Batch Checker")
+st.title("🚛 Customs PBN Batch Checker")
+
+st.write(
+    "Paste your PBN list below, check them against Revenue, "
+    "and choose which CALL TO CUSTOMS entries should be watched."
+)
 
 st.caption(
-    f"Time: "
+    f"Revenue Customs Channel Lookup • "
     f"{datetime.now().strftime('%d/%m/%Y %H:%M:%S')}"
 )
 
 
 # ============================================================
-# CHECK NEW PBNS
+# SESSION STATE
 # ============================================================
 
-st.subheader("Check New PBNs")
+if "results" not in st.session_state:
+    st.session_state.results = []
 
-st.write(
-    "Enter the PBNs you want to check. "
-    "You can optionally include the trailer/reg."
-)
+if "check_complete" not in st.session_state:
+    st.session_state.check_complete = False
 
-with st.form(
-    "check_form",
-    clear_on_submit=False
+
+# ============================================================
+# PBN CHECKER
+# ============================================================
+
+st.subheader("1. Check PBNs")
+
+raw_pbns = st.text_area(
+    "Paste PBNs Here",
+    height=200,
+    placeholder=(
+        "FK44CM93\n"
+        "AV99EC76\n"
+        "CU23AW49"
+    )
+).strip()
+
+
+if st.button(
+    "🔎 Check PBNs",
+    type="primary",
+    use_container_width=True
 ):
 
-    txt = st.text_area(
-        "PBNs and Trailers",
-        placeholder=(
-            "RX23VN92\n"
-            "GTC415 RX23VN92\n"
-            "GTC372 ER47AF49"
-        ),
-        height=150,
-    )
+    pbn_list = [
+        p.strip().upper()
+        for p in raw_pbns.splitlines()
+        if p.strip()
+    ]
 
-    check_btn = st.form_submit_button(
-        "🔎 Check PBNs"
-    )
+    # Remove duplicate PBNs while preserving order
+    pbn_list = list(dict.fromkeys(pbn_list))
 
-
-# ============================================================
-# RUN CHECKS
-# ============================================================
-
-if check_btn:
-
-    if not txt.strip():
-
-        st.warning(
-            "Please enter at least one PBN."
-        )
+    if not pbn_list:
+        st.warning("Please paste at least one PBN.")
 
     else:
 
-        entries = parse_pbn_input(txt)
+        results = []
 
-        if not entries:
+        progress_bar = st.progress(0)
+        status_text = st.empty()
 
-            st.warning(
-                "No valid PBNs found."
+        driver = None
+
+        try:
+
+            status_text.text("Starting Revenue browser...")
+
+            driver = create_driver()
+
+            for idx, pbn in enumerate(pbn_list):
+
+                status_text.text(
+                    f"Checking PBN {idx + 1} of "
+                    f"{len(pbn_list)}: {pbn}"
+                )
+
+                try:
+
+                    result = check_pbn(
+                        driver,
+                        pbn
+                    )
+
+                except Exception as e:
+
+                    result = {
+                        "PBN ID": pbn,
+                        "Trailer": "N/A",
+                        "Status": (
+                            f"❌ FAILED: "
+                            f"{str(e)[:80]}"
+                        )
+                    }
+
+                results.append(result)
+
+                progress_bar.progress(
+                    (idx + 1) / len(pbn_list)
+                )
+
+            st.session_state.results = results
+            st.session_state.check_complete = True
+
+            status_text.empty()
+            progress_bar.empty()
+
+            st.success(
+                f"All {len(results)} PBN checks complete!"
             )
 
-        else:
+        except Exception as e:
 
-            results = []
-            errors = []
+            st.session_state.results = []
+            st.session_state.check_complete = False
 
-            driver = None
+            progress_bar.empty()
+            status_text.empty()
 
-            try:
+            st.error(
+                "Failed to start automated browser engine: "
+                f"{str(e)}"
+            )
 
-                with st.spinner(
-                    "Checking Revenue ROS..."
-                ):
+        finally:
 
-                    driver = create_driver()
+            if driver is not None:
 
-                    for entry in entries:
-
-                        pbn = entry["pbn"]
-                        trailer = entry["trailer"]
-
-                        try:
-
-                            result = check_pbn(
-                                driver,
-                                pbn
-                            )
-
-                            result["trailer"] = trailer
-
-                            results.append(
-                                result
-                            )
-
-                        except Exception as e:
-
-                            errors.append({
-                                "pbn": pbn,
-                                "trailer": trailer,
-                                "error": str(e),
-                            })
-
-            except Exception as e:
-
-                st.error(
-                    "Could not start the Revenue checker."
-                )
-
-                st.code(
-                    traceback.format_exc()
-                )
-
-            finally:
-
-                if driver:
-
-                    try:
-                        driver.quit()
-                    except Exception:
-                        pass
-
-            st.session_state.check_results = results
-            st.session_state.check_errors = errors
+                try:
+                    driver.quit()
+                except Exception:
+                    pass
 
 
 # ============================================================
-# DISPLAY CHECK RESULTS
+# RESULTS
 # ============================================================
 
-if st.session_state.check_results:
+if st.session_state.results:
 
     st.divider()
 
-    st.subheader("PBN Check Results")
+    st.subheader("2. Check Results")
 
-    current_watchlist = load_data()
+    results = st.session_state.results
 
-    watched_pbns = {
-        str(item.get("pbn", "")).upper()
-        for item in current_watchlist
-    }
+    # Summary counts
+    call_to_customs = [
+        r for r in results
+        if r["Status"] == "🛑 CALL TO CUSTOMS"
+    ]
 
-    for index, result in enumerate(
-        st.session_state.check_results
-    ):
+    cleared = [
+        r for r in results
+        if r["Status"] == "✅ EXIT THE PORT"
+    ]
 
-        pbn = result["pbn"]
-        trailer = result.get(
-            "trailer",
-            "Unknown"
+    invalid = [
+        r for r in results
+        if r["Status"] == "❌ INVALID PBN"
+    ]
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.metric(
+            "Checked",
+            len(results)
         )
-        status = result["status"]
 
-        st.markdown(
-            f"### 🚛 {trailer} — {pbn}"
+    with col2:
+        st.metric(
+            "Call to Customs",
+            len(call_to_customs)
         )
 
-        if status == "CALL TO CUSTOMS":
+    with col3:
+        st.metric(
+            "Exit the Port",
+            len(cleared)
+        )
 
-            st.success(
-                "🔴 CALL TO CUSTOMS"
+    with col4:
+        st.metric(
+            "Invalid",
+            len(invalid)
+        )
+
+    # Display full results
+    st.dataframe(
+        results,
+        use_container_width=True,
+        hide_index=True
+    )
+
+    # ========================================================
+    # WATCHLIST SELECTION
+    # ========================================================
+
+    if call_to_customs:
+
+        st.subheader("3. Add CALL TO CUSTOMS PBNs to Watchlist")
+
+        st.info(
+            "Select the PBNs you want the 15-minute GitHub watcher "
+            "to monitor. Nothing is added automatically."
+        )
+
+        selections = {}
+
+        for result in call_to_customs:
+
+            pbn = result["PBN ID"]
+            trailer = result.get("Trailer", "Unknown")
+
+            label = f"{pbn}"
+
+            if trailer and trailer != "Unknown":
+                label += f" — {trailer}"
+
+            selections[pbn] = st.checkbox(
+                label,
+                key=f"watch_{pbn}"
             )
 
-            st.write(
-                "This PBN can now be added to "
-                "the automatic watchlist."
-            )
+        if st.button(
+            "👁️ Add Selected to Watchlist",
+            type="primary",
+            use_container_width=True
+        ):
 
-            if pbn in watched_pbns:
+            selected = [
+                result
+                for result in call_to_customs
+                if selections.get(result["PBN ID"], False)
+            ]
 
-                st.info(
-                    "✅ Already on the active watchlist."
+            if not selected:
+
+                st.warning(
+                    "Please select at least one PBN."
                 )
 
             else:
 
-                if st.button(
-                    "➕ Add to Watchlist",
-                    key=f"add_watch_{index}_{pbn}"
-                ):
+                # Reload the latest version from GitHub before modifying it.
+                # This avoids relying on an old copy in Streamlit's session.
+                current_watchlist = load_watchlist()
 
-                    # Reload immediately before saving.
-                    # This prevents overwriting a newer
-                    # watchlist entry created elsewhere.
-                    items = load_data()
+                existing_pbns = {
+                    str(item.get("pbn", "")).upper()
+                    for item in current_watchlist
+                }
 
-                    existing = {
-                        str(
-                            item.get("pbn", "")
-                        ).upper()
-                        for item in items
-                    }
+                added = 0
+                already_there = 0
 
-                    if pbn in existing:
+                timestamp = datetime.now().strftime(
+                    "%d/%m/%Y %H:%M:%S"
+                )
 
-                        st.info(
-                            "This PBN is already on "
-                            "the watchlist."
-                        )
+                for result in selected:
 
-                    else:
+                    pbn = result["PBN ID"].upper()
+                    trailer = result.get(
+                        "Trailer",
+                        "Unknown"
+                    )
 
-                        timestamp = datetime.now().strftime(
-                            "%H:%M:%S"
-                        )
+                    if pbn in existing_pbns:
 
-                        items.append({
+                        already_there += 1
+                        continue
+
+                    current_watchlist.append(
+                        {
                             "pbn": pbn,
                             "trailer": trailer,
-                            "added_at": timestamp,
-                        })
+                            "added_at": timestamp
+                        }
+                    )
 
-                        save_data(items)
+                    existing_pbns.add(pbn)
+                    added += 1
+
+                if added > 0:
+
+                    if save_watchlist(
+                        current_watchlist
+                    ):
 
                         st.success(
-                            f"✅ {pbn} added to watchlist."
+                            f"Added {added} PBN(s) to the watchlist."
                         )
 
-                        # Update local session result so
-                        # the button becomes unavailable
-                        # after rerun.
+                        if already_there:
+                            st.info(
+                                f"{already_there} selected PBN(s) "
+                                "were already being watched."
+                            )
+
+                        # Clear selections by rerunning
                         st.rerun()
 
-        elif status == "EXIT THE PORT":
+                elif already_there:
 
-            st.success(
-                "🟢 EXIT THE PORT"
-            )
-
-            st.write(
-                "This PBN has already cleared."
-            )
-
-        elif status == "CHECKED IN":
-
-            st.info(
-                "🔵 CHECKED IN"
-            )
-
-            st.write(
-                "Not currently showing "
-                "Call to Customs."
-            )
-
-        else:
-
-            st.warning(
-                f"⚠️ Status: {status}"
-            )
-
-        # Expandable raw Revenue response.
-        with st.expander(
-            "Show Revenue response"
-        ):
-
-            st.text(
-                result.get(
-                    "raw_text",
-                    ""
-                )
-            )
-
-        st.divider()
-
-
-# ============================================================
-# DISPLAY ERRORS
-# ============================================================
-
-if st.session_state.check_errors:
-
-    st.subheader("⚠️ Checks with errors")
-
-    for error in st.session_state.check_errors:
-
-        st.error(
-            f"{error['trailer']} — "
-            f"{error['pbn']}: "
-            f"{error['error']}"
-        )
+                    st.info(
+                        "All selected PBNs are already "
+                        "on the watchlist."
+                    )
 
 
 # ============================================================
 # ACTIVE WATCHLIST
 # ============================================================
 
-st.subheader("Active Watchlist")
+st.divider()
 
-items = load_data()
+st.subheader("👁️ Active Watchlist")
+
+items = load_watchlist()
 
 if not items:
 
@@ -834,45 +735,59 @@ if not items:
 
 else:
 
+    st.caption(
+        f"{len(items)} PBN(s) currently being monitored by "
+        "the GitHub watcher."
+    )
+
     for idx, item in enumerate(items):
 
-        tr = item.get(
+        trailer = item.get(
             "trailer",
             "Unknown"
         )
 
-        pb = item.get(
+        pbn = item.get(
             "pbn",
             "N/A"
         )
 
-        ts = item.get(
+        added_at = item.get(
             "added_at",
             "N/A"
         )
 
-        c1, c2 = st.columns(
-            [5, 1]
-        )
+        col1, col2 = st.columns([5, 1])
 
-        with c1:
+        with col1:
 
             st.info(
-                f"Trailer: {tr} | "
-                f"PBN: {pb} | "
-                f"Added: {ts}"
+                f"Trailer/Reg: {trailer}  |  "
+                f"PBN: {pbn}  |  "
+                f"Added: {added_at}"
             )
 
-        with c2:
+        with col2:
 
             if st.button(
                 "Delete",
-                key=f"del_{idx}_{pb}"
+                key=f"delete_{idx}",
+                use_container_width=True
             ):
 
-                items.pop(idx)
+                # Reload latest GitHub copy before deleting
+                latest_items = load_watchlist()
 
-                save_data(items)
+                # Remove matching PBN
+                latest_items = [
+                    x for x in latest_items
+                    if str(x.get("pbn", "")).upper()
+                    != str(pbn).upper()
+                ]
+
+                save_watchlist(
+                    latest_items
+                )
 
                 st.rerun()
 
@@ -881,8 +796,23 @@ else:
 # REFRESH
 # ============================================================
 
+st.divider()
+
 if st.button(
-    "🔄 Sync / Refresh"
+    "🔄 Sync / Refresh Watchlist",
+    use_container_width=True
 ):
 
     st.rerun()
+
+
+# ============================================================
+# FOOTER
+# ============================================================
+
+st.caption(
+    "Revenue checks use the Customs Channel Lookup. "
+    "The GitHub Actions watcher is responsible for "
+    "continuing to monitor PBNs placed on the watchlist."
+)
+```
