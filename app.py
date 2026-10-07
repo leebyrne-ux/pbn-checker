@@ -607,6 +607,17 @@ if st.session_state.results:
 # WATCHLIST ACTIONS
 # ========================================================
 
+# ========================================================
+# WATCHLIST ACTIONS
+# ========================================================
+
+# Find CALL TO CUSTOMS results from the completed checks
+call_to_customs = [
+    result
+    for result in st.session_state.results
+    if result.get("Status") == "🛑 CALL TO CUSTOMS"
+]
+
 if call_to_customs:
 
     st.subheader("Add to Watchlist")
@@ -646,12 +657,9 @@ if call_to_customs:
 
         with col2:
 
-            # Already being watched
             if pbn in existing_pbns:
 
-                st.success(
-                    "✅ On Watchlist"
-                )
+                st.success("✅ On Watchlist")
 
             else:
 
@@ -662,7 +670,6 @@ if call_to_customs:
                 ):
 
                     # Reload the latest version immediately before saving
-                    # in case the GitHub watchlist changed elsewhere.
                     latest_watchlist = load_watchlist()
 
                     latest_pbns = {
@@ -698,8 +705,6 @@ if call_to_customs:
                                 f"{pbn} added to watchlist."
                             )
 
-                            # Refresh the page so the button becomes
-                            # "On Watchlist".
                             st.rerun()
 
 
