@@ -814,4 +814,3 @@ st.caption(
     "The GitHub Actions watcher is responsible for "
     "continuing to monitor PBNs placed on the watchlist."
 )
-```
