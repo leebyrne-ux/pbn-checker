@@ -1,85 +1,87 @@
+```yaml
 name: check-watchlist
 
 on:
-workflow_dispatch:
-schedule:
-- cron: "*/15 * * * *"
+  workflow_dispatch:
+  schedule:
+    - cron: "*/15 * * * *"
 
 jobs:
-check-pbn:
-runs-on: ubuntu-24.04
-timeout-minutes: 10
+  check-pbn:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
 
-permissions:
-  contents: write
+    permissions:
+      contents: write
 
-steps:
-  - name: Checkout repository
-    uses: actions/checkout@v4
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-  - name: Diagnose watchlist
-    run: |
-      echo "Current directory:"
-      pwd
-      echo "Files in repository:"
-      ls -la
-      echo "Watchlist file:"
-      if [ -f watchlist.json ]; then
-        cat watchlist.json
-      else
-        echo "watchlist.json NOT FOUND"
-      fi
+      - name: Diagnose watchlist
+        run: |
+          echo "Current directory:"
+          pwd
+          echo "Files in repository:"
+          ls -la
+          echo "Watchlist file:"
+          if [ -f watchlist.json ]; then
+            cat watchlist.json
+          else
+            echo "watchlist.json NOT FOUND"
+          fi
 
-  - name: Set up Python
-    uses: actions/setup-python@v5
-    with:
-      python-version: "3.12"
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
-  - name: Install Google Chrome
-    run: |
-      wget -q -O - https://dl.google.com/linux/linux_signing_key.pub \
-        | gpg --dearmor \
-        | sudo tee /usr/share/keyrings/google-chrome.gpg > /dev/null
+      - name: Install Google Chrome
+        run: |
+          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub \
+            | gpg --dearmor \
+            | sudo tee /usr/share/keyrings/google-chrome.gpg > /dev/null
 
-      echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" \
-        | sudo tee /etc/apt/sources.list.d/google-chrome.list
+          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" \
+            | sudo tee /etc/apt/sources.list.d/google-chrome.list
 
-      sudo apt-get update
-      sudo apt-get install -y google-chrome-stable
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
 
-  - name: Remove old ChromeDriver
-    run: |
-      sudo rm -f /usr/bin/chromedriver
-      sudo rm -f /usr/local/bin/chromedriver
-      echo "Chrome:"
-      google-chrome --version
-      echo "ChromeDriver in PATH:"
-      which chromedriver || echo "No system ChromeDriver - Selenium Manager will provide it."
+      - name: Remove old ChromeDriver
+        run: |
+          sudo rm -f /usr/bin/chromedriver
+          sudo rm -f /usr/local/bin/chromedriver
+          echo "Chrome:"
+          google-chrome --version
+          echo "ChromeDriver in PATH:"
+          which chromedriver || echo "No system ChromeDriver - Selenium Manager will provide it."
 
-  - name: Install Python dependencies
-    run: |
-      python -m pip install --upgrade pip
-      pip install selenium requests
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install selenium requests
 
-  - name: Run PBN watcher
-    env:
-      GOOGLE_CHAT_WEBHOOK: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
-    run: |
-      python watcher.py
+      - name: Run PBN watcher
+        env:
+          GOOGLE_CHAT_WEBHOOK: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
+        run: |
+          python watcher.py
 
-  - name: Upload ROS result screenshots
-    if: always()
-    uses: actions/upload-artifact@v4
-    with:
-      name: ros-result-screenshots
-      path: |
-        ros_result_*.png
-        debug_*.png
-        debug_*.html
-      if-no-files-found: ignore
+      - name: Upload ROS result screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ros-result-screenshots
+          path: |
+            ros_result_*.png
+            debug_*.png
+            debug_*.html
+          if-no-files-found: ignore
 
-  - name: Commit updated watchlist
-    uses: stefanzweifel/git-auto-commit-action@v5
-    with:
-      commit_message: "Auto-update watchlist after check"
-      file_pattern: watchlist.json
+      - name: Commit updated watchlist
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Auto-update watchlist after check"
+          file_pattern: watchlist.json
+```
