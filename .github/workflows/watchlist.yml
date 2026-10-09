@@ -16,6 +16,18 @@ permissions:
 steps:
   - name: Checkout repository
     uses: actions/checkout@v4
+      - name: Diagnose watchlist
+        run: |
+          echo "Current directory:"
+          pwd
+          echo "Files in repository:"
+          ls -la
+          echo "Watchlist file:"
+          if [ -f watchlist.json ]; then
+            cat watchlist.json
+          else
+            echo "watchlist.json NOT FOUND"
+          fi
 
   - name: Set up Python
     uses: actions/setup-python@v5
