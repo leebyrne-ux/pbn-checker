@@ -1,3 +1,4 @@
+
 import os
 import json
 import time
@@ -31,7 +32,7 @@ WATCHLIST_FILE = "watchlist.json"
 # ============================================================
 
 def get_repo():
-    """Connect to the GitHub repository using Streamlit secrets."""
+    """Connect to GitHub using Streamlit secrets."""
 
     token = st.secrets.get("GITHUB_TOKEN")
     repo_name = st.secrets.get("REPO_NAME")
@@ -42,6 +43,7 @@ def get_repo():
     try:
         github = Github(token)
         return github.get_repo(repo_name)
+
     except Exception as e:
         st.error(f"GitHub connection error: {e}")
         return None
@@ -49,8 +51,8 @@ def get_repo():
 
 def load_data():
     """
-    Load watchlist from GitHub.
-    Falls back to local watchlist.json if GitHub is unavailable.
+    Load the watchlist from GitHub.
+    Fall back to the local file if GitHub is unavailable.
     """
 
     repo = get_repo()
@@ -65,7 +67,9 @@ def load_data():
             raw = file_data.decoded_content.decode("utf-8")
             data = json.loads(raw)
 
-            # Keep local copy updated too
+            if not isinstance(data, list):
+                raise ValueError("Watchlist must be a JSON list.")
+
             with open(WATCHLIST_FILE, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
 
@@ -74,11 +78,13 @@ def load_data():
         except Exception:
             pass
 
-    # Local fallback
     if os.path.exists(WATCHLIST_FILE):
         try:
             with open(WATCHLIST_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+
+            return data if isinstance(data, list) else []
+
         except Exception:
             return []
 
@@ -86,11 +92,8 @@ def load_data():
 
 
 def save_data(data):
-    """
-    Save watchlist locally and synchronise it to GitHub.
-    """
+    """Save the watchlist locally and synchronise it to GitHub."""
 
-    # Always save a local copy
     with open(WATCHLIST_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
@@ -108,12 +111,10 @@ def save_data(data):
             ref="main"
         )
 
-        body = json.dumps(data, indent=2)
-
         repo.update_file(
             path=WATCHLIST_FILE,
             message="Update watchlist",
-            content=body,
+            content=json.dumps(data, indent=2),
             sha=file_data.sha,
             branch="main"
         )
@@ -124,13 +125,19 @@ def save_data(data):
     except Exception as e:
         st.error(f"GitHub sync error: {e}")
         return False
-        
+
+
 def auto_add_customs_calls(results):
-    """Add customs-called PBNs to the live GitHub watchlist."""
+    """
+    Automatically add PBNs returning CALL TO CUSTOMS
+    to the live GitHub watchlist.
+
+    Existing PBNs are not duplicated.
+    """
 
     customs_results = [
-        r for r in results
-        if r.get("Status") == "🛑 CALL TO CUSTOMS"
+        result for result in results
+        if result.get("Status") == "🛑 CALL TO CUSTOMS"
     ]
 
     outcomes = {}
@@ -144,10 +151,15 @@ def auto_add_customs_calls(results):
         for result in customs_results:
             pbn = str(result.get("PBN ID", "")).strip().upper()
             outcomes[pbn] = "⚠️ GitHub unavailable — not added"
+
         return outcomes
 
     try:
-        file_data = repo.get_contents(WATCHLIST_FILE, ref="main")
+        file_data = repo.get_contents(
+            WATCHLIST_FILE,
+            ref="main"
+        )
+
         watchlist = json.loads(
             file_data.decoded_content.decode("utf-8")
         )
@@ -157,9 +169,11 @@ def auto_add_customs_calls(results):
 
     except Exception as e:
         st.error(f"Could not read GitHub watchlist: {e}")
+
         for result in customs_results:
             pbn = str(result.get("PBN ID", "")).strip().upper()
             outcomes[pbn] = "⚠️ Could not read watchlist"
+
         return outcomes
 
     existing_pbns = {
@@ -172,7 +186,10 @@ def auto_add_customs_calls(results):
 
     for result in customs_results:
         pbn = str(result.get("PBN ID", "")).strip().upper()
-        trailer = str(result.get("Trailer", "Unknown")).strip() or "Unknown"
+        trailer = (
+            str(result.get("Trailer", "Unknown")).strip()
+            or "Unknown"
+        )
 
         if not pbn:
             outcomes[pbn] = "⚠️ Missing PBN — not added"
@@ -184,28 +201,37 @@ def auto_add_customs_calls(results):
             additions.append({
                 "pbn": pbn,
                 "trailer": trailer,
-                "added_at": datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+                "added_at": datetime.now().strftime(
+                    "%d/%m/%Y %H:%M:%S"
+                )
             })
+
             existing_pbns.add(pbn)
-            outcomes[pbn] = "🟠 Called to customs — Added to watchlist"
+
+            outcomes[pbn] = (
+                "🟠 Called to customs — Added to watchlist"
+            )
 
     if additions:
-        watchlist.extend(additions)
+        updated_watchlist = watchlist + additions
 
         try:
             repo.update_file(
                 path=WATCHLIST_FILE,
                 message="Automatically add customs-called PBNs",
-                content=json.dumps(watchlist, indent=2),
+                content=json.dumps(updated_watchlist, indent=2),
                 sha=file_data.sha,
                 branch="main"
             )
 
+            # Update the local copy after GitHub confirms the save.
             with open(WATCHLIST_FILE, "w", encoding="utf-8") as f:
-                json.dump(watchlist, f, indent=2)
+                json.dump(updated_watchlist, f, indent=2)
 
         except Exception as e:
-            st.error(f"GitHub could not save the watchlist update: {e}")
+            st.error(
+                f"GitHub could not save the watchlist update: {e}"
+            )
 
             for item in additions:
                 outcomes[item["pbn"]] = (
@@ -220,9 +246,7 @@ def auto_add_customs_calls(results):
 # ============================================================
 
 def create_driver():
-    """
-    Create a headless Chrome browser.
-    """
+    """Create a headless Chrome browser."""
 
     options = webdriver.ChromeOptions()
 
@@ -236,16 +260,13 @@ def create_driver():
         "--disable-blink-features=AutomationControlled"
     )
 
-    driver = webdriver.Chrome(options=options)
-
-    return driver
+    return webdriver.Chrome(options=options)
 
 
 def get_visible_inputs(driver):
-    """Return visible/enabled input elements."""
+    """Return visible and enabled input elements."""
 
     inputs = driver.find_elements(By.TAG_NAME, "input")
-
     visible_inputs = []
 
     for element in inputs:
@@ -259,12 +280,7 @@ def get_visible_inputs(driver):
 
 
 def find_pbn_input(driver):
-    """
-    Find the visible PBN input.
-
-    Revenue's current page contains multiple inputs, so we don't
-    blindly assume input[0] is always the correct one.
-    """
+    """Find the visible PBN input on Revenue's page."""
 
     inputs = driver.find_elements(By.TAG_NAME, "input")
 
@@ -286,7 +302,6 @@ def find_pbn_input(driver):
         except Exception:
             continue
 
-    # Fallback to first visible input
     visible_inputs = get_visible_inputs(driver)
 
     if visible_inputs:
@@ -296,26 +311,21 @@ def find_pbn_input(driver):
 
 
 def click_get_channel(driver):
-    """
-    Find and click Revenue's 'Get your Channel' button.
-    """
+    """Find and click Revenue's Get your Channel button."""
 
     wait = WebDriverWait(driver, 10)
 
-    # Try button text
     try:
         button = wait.until(
-            EC.element_to_be_clickable(
-                (
-                    By.XPATH,
-                    "//button[contains("
-                    "translate(normalize-space(.),"
-                    "'ABCDEFGHIJKLMNOPQRSTUVWXYZ',"
-                    "'abcdefghijklmnopqrstuvwxyz'),"
-                    "'get your channel'"
-                    ")]"
-                )
-            )
+            EC.element_to_be_clickable((
+                By.XPATH,
+                "//button[contains("
+                "translate(normalize-space(.),"
+                "'ABCDEFGHIJKLMNOPQRSTUVWXYZ',"
+                "'abcdefghijklmnopqrstuvwxyz'),"
+                "'get your channel'"
+                ")]"
+            ))
         )
 
         button.click()
@@ -324,20 +334,17 @@ def click_get_channel(driver):
     except Exception:
         pass
 
-    # Try input value
     try:
         button = wait.until(
-            EC.element_to_be_clickable(
-                (
-                    By.XPATH,
-                    "//input[contains("
-                    "translate(@value,"
-                    "'ABCDEFGHIJKLMNOPQRSTUVWXYZ',"
-                    "'abcdefghijklmnopqrstuvwxyz'),"
-                    "'get your channel'"
-                    ")]"
-                )
-            )
+            EC.element_to_be_clickable((
+                By.XPATH,
+                "//input[contains("
+                "translate(@value,"
+                "'ABCDEFGHIJKLMNOPQRSTUVWXYZ',"
+                "'abcdefghijklmnopqrstuvwxyz'),"
+                "'get your channel'"
+                ")]"
+            ))
         )
 
         button.click()
@@ -348,9 +355,7 @@ def click_get_channel(driver):
 
 
 def extract_trailer_number(page_text):
-    """
-    Attempt to extract the vehicle registration / trailer number.
-    """
+    """Attempt to extract the trailer or vehicle registration."""
 
     lines = [
         line.strip()
@@ -359,24 +364,12 @@ def extract_trailer_number(page_text):
     ]
 
     for index, line in enumerate(lines):
-
         upper = line.upper()
 
-        if "TRAILER NUMBER" in upper:
-
-            if ":" in line:
-                value = line.split(":", 1)[1].strip()
-
-                if value:
-                    return value
-
-            if index + 1 < len(lines):
-                next_line = lines[index + 1].strip()
-
-                if next_line:
-                    return next_line
-
-        if "VEHICLE REGISTRATION" in upper:
+        if (
+            "TRAILER NUMBER" in upper
+            or "VEHICLE REGISTRATION" in upper
+        ):
 
             if ":" in line:
                 value = line.split(":", 1)[1].strip()
@@ -394,19 +387,14 @@ def extract_trailer_number(page_text):
 
 
 def determine_status(page_text):
-    """
-    Determine the Revenue channel result.
-    """
+    """Determine the Revenue Customs Channel result."""
 
     text = page_text.upper()
 
     if "INVALID PBN" in text:
         return "❌ INVALID PBN"
 
-    if "CALL TO CUSTOMS" in text:
-        return "🛑 CALL TO CUSTOMS"
-
-    if "ORANGE" in text:
+    if "CALL TO CUSTOMS" in text or "ORANGE" in text:
         return "🛑 CALL TO CUSTOMS"
 
     if "EXIT THE PORT" in text:
@@ -419,9 +407,7 @@ def determine_status(page_text):
 
 
 def check_pbn(driver, pbn):
-    """
-    Check one PBN against Revenue Customs Channel Lookup.
-    """
+    """Check one PBN against Revenue's Customs Channel Lookup."""
 
     driver.get(ROS_URL)
 
@@ -476,11 +462,11 @@ st.title("🚛 Customs PBN Batch Checker")
 
 st.write(
     "Paste your PBN list below, check them against Revenue, "
-    "and add CALL TO CUSTOMS entries to the watchlist."
+    "and automatically add CALL TO CUSTOMS entries to the watchlist."
 )
 
 st.caption(
-    f"Revenue Customs Channel Lookup • "
+    "Revenue Customs Channel Lookup • "
     f"{datetime.now().strftime('%d/%m/%Y %H:%M:%S')}"
 )
 
@@ -491,6 +477,9 @@ st.caption(
 
 if "results" not in st.session_state:
     st.session_state.results = []
+
+if "watchlist_outcomes" not in st.session_state:
+    st.session_state.watchlist_outcomes = {}
 
 
 # ============================================================
@@ -522,53 +511,36 @@ if st.button(
         if p.strip()
     ]
 
-    # Remove duplicates
+    # Remove duplicate PBNs from the input.
     pbn_list = list(dict.fromkeys(pbn_list))
 
     if not pbn_list:
-
         st.warning("Please paste at least one PBN.")
 
     else:
-
         results = []
-
         progress_bar = st.progress(0)
         status_text = st.empty()
-
         driver = None
 
         try:
-
-            status_text.text(
-                "Starting Revenue browser..."
-            )
-
+            status_text.text("Starting Revenue browser...")
             driver = create_driver()
 
             for idx, pbn in enumerate(pbn_list):
-
                 status_text.text(
                     f"Checking PBN {idx + 1} of "
                     f"{len(pbn_list)}: {pbn}"
                 )
 
                 try:
-
-                    result = check_pbn(
-                        driver,
-                        pbn
-                    )
+                    result = check_pbn(driver, pbn)
 
                 except Exception as e:
-
                     result = {
                         "PBN ID": pbn,
                         "Trailer": "N/A",
-                        "Status": (
-                            f"❌ FAILED: "
-                            f"{str(e)[:80]}"
-                        )
+                        "Status": f"❌ FAILED: {str(e)[:80]}"
                     }
 
                 results.append(result)
@@ -577,36 +549,41 @@ if st.button(
                     (idx + 1) / len(pbn_list)
                 )
 
-            
-# Automatically add any customs-called PBNs
-outcomes = auto_add_customs_calls(results)
+            # Automatically add customs-called PBNs.
+            outcomes = auto_add_customs_calls(results)
 
-# Include the watchlist outcome in the results table
-for result in results:
-    pbn = str(result.get("PBN ID", "")).strip().upper()
-    result["Watchlist"] = outcomes.get(pbn, "—")
+            # Add the watchlist outcome to each results row.
+            for result in results:
+                pbn = str(
+                    result.get("PBN ID", "")
+                ).strip().upper()
 
-st.session_state.watchlist_outcomes = outcomes
-st.session_state.results = results
+                result["Watchlist"] = outcomes.get(pbn, "—")
 
-status_text.empty()
-progress_bar.empty()
+            st.session_state.watchlist_outcomes = outcomes
+            st.session_state.results = results
 
-st.success(f"All {len(results)} PBN checks complete!")
+            status_text.empty()
+            progress_bar.empty()
 
-added_count = sum(
-    1 for outcome in outcomes.values()
-    if outcome == "🟠 Called to customs — Added to watchlist"
-)
+            st.success(
+                f"All {len(results)} PBN checks complete!"
+            )
 
-if added_count:
-    st.success(
-        f"{added_count} PBN(s) automatically added to the watchlist."
-    )
+            added_count = sum(
+                1 for outcome in outcomes.values()
+                if outcome == (
+                    "🟠 Called to customs — Added to watchlist"
+                )
+            )
 
+            if added_count:
+                st.success(
+                    f"{added_count} PBN(s) automatically "
+                    "added to the watchlist."
+                )
 
         except Exception as e:
-
             st.session_state.results = []
 
             progress_bar.empty()
@@ -618,9 +595,7 @@ if added_count:
             )
 
         finally:
-
             if driver is not None:
-
                 try:
                     driver.quit()
                 except Exception:
@@ -632,14 +607,10 @@ if added_count:
 # ============================================================
 
 if st.session_state.results:
-
     st.divider()
-
     st.subheader("2. Check Results")
 
     results = st.session_state.results
-
-    # Summary counts
 
     call_to_customs = [
         r for r in results
@@ -659,30 +630,16 @@ if st.session_state.results:
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
-        st.metric(
-            "Checked",
-            len(results)
-        )
+        st.metric("Checked", len(results))
 
     with col2:
-        st.metric(
-            "Call to Customs",
-            len(call_to_customs)
-        )
+        st.metric("Call to Customs", len(call_to_customs))
 
     with col3:
-        st.metric(
-            "Exit the Port",
-            len(cleared)
-        )
+        st.metric("Exit the Port", len(cleared))
 
     with col4:
-        st.metric(
-            "Invalid",
-            len(invalid)
-        )
-
-    # Full results table
+        st.metric("Invalid", len(invalid))
 
     st.dataframe(
         results,
@@ -690,155 +647,33 @@ if st.session_state.results:
         hide_index=True
     )
 
-    # ========================================================
-    # ONE-CLICK WATCHLIST ACTION
-    # ========================================================
-
-    if call_to_customs:
-
-        st.subheader("Add to Watchlist")
-
-        st.info(
-            "CALL TO CUSTOMS PBNs can be added to the "
-            "15-minute watchlist with one click."
-        )
-
-        # Get current watchlist
-        current_watchlist = load_data()
-
-        existing_pbns = {
-            str(item.get("pbn", "")).upper()
-            for item in current_watchlist
-        }
-
-        for result in call_to_customs:
-
-            pbn = result["PBN ID"].upper()
-            trailer = result.get(
-                "Trailer",
-                "Unknown"
-            )
-
-            col1, col2 = st.columns([5, 2])
-
-            with col1:
-
-                if trailer and trailer != "Unknown":
-
-                    st.write(
-                        f"**{pbn}** — {trailer}"
-                    )
-
-                else:
-
-                    st.write(
-                        f"**{pbn}**"
-                    )
-
-                st.caption(
-                    "🛑 CALL TO CUSTOMS"
-                )
-
-            with col2:
-
-                if pbn in existing_pbns:
-
-                    st.success(
-                        "✅ On Watchlist"
-                    )
-
-                else:
-
-                    if st.button(
-                        "👁️ Add to Watchlist",
-                        key=f"add_watch_{pbn}",
-                        use_container_width=True
-                    ):
-
-                        # Reload the latest GitHub version
-                        latest_watchlist = load_data()
-
-                        latest_pbns = {
-                            str(item.get("pbn", "")).upper()
-                            for item in latest_watchlist
-                        }
-
-                        if pbn in latest_pbns:
-
-                            st.info(
-                                f"{pbn} is already "
-                                "on the watchlist."
-                            )
-
-                        else:
-
-                            timestamp = datetime.now().strftime(
-                                "%d/%m/%Y %H:%M:%S"
-                            )
-
-                            latest_watchlist.append(
-                                {
-                                    "pbn": pbn,
-                                    "trailer": trailer,
-                                    "added_at": timestamp
-                                }
-                            )
-
-                            if save_data(
-                                latest_watchlist
-                            ):
-
-                                st.success(
-                                    f"{pbn} added to watchlist."
-                                )
-
-                                st.rerun()
-
 
 # ============================================================
 # ACTIVE WATCHLIST
 # ============================================================
 
 st.divider()
-
 st.subheader("👁️ Active Watchlist")
 
 items = load_data()
 
 if not items:
-
-    st.info(
-        "Watchlist is empty."
-    )
+    st.info("Watchlist is empty.")
 
 else:
-
     st.caption(
         f"{len(items)} PBN(s) currently being monitored "
         "by the GitHub watcher."
     )
 
     for idx, item in enumerate(items):
-
-        trailer = item.get(
-            "trailer",
-            "Unknown"
-        )
-
-        pbn = item.get(
-            "pbn",
-            "N/A"
-        )
-
-        added_at = item.get(
-            "added_at",
-            "N/A"
-        )
+        trailer = item.get("trailer", "Unknown")
+        pbn = item.get("pbn", "N/A")
+        added_at = item.get("added_at", "N/A")
 
         col1, col2 = st.columns([5, 1])
 
         with col1:
-
             st.info(
                 f"Trailer/Reg: {trailer}  |  "
                 f"PBN: {pbn}  |  "
@@ -846,28 +681,21 @@ else:
             )
 
         with col2:
-
             if st.button(
                 "Delete",
                 key=f"delete_{idx}",
                 use_container_width=True
             ):
-
-                # Reload latest GitHub copy
                 latest_items = load_data()
 
-                # Remove matching PBN
                 latest_items = [
-                    x for x in latest_items
-                    if str(x.get("pbn", "")).upper()
+                    item for item in latest_items
+                    if str(item.get("pbn", "")).upper()
                     != str(pbn).upper()
                 ]
 
-                save_data(
-                    latest_items
-                )
-
-                st.rerun()
+                if save_data(latest_items):
+                    st.rerun()
 
 
 # ============================================================
@@ -880,7 +708,6 @@ if st.button(
     "🔄 Sync / Refresh Watchlist",
     use_container_width=True
 ):
-
     st.rerun()
 
 
