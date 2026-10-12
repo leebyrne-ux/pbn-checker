@@ -124,6 +124,95 @@ def save_data(data):
     except Exception as e:
         st.error(f"GitHub sync error: {e}")
         return False
+        
+def auto_add_customs_calls(results):
+    """Add customs-called PBNs to the live GitHub watchlist."""
+
+    customs_results = [
+        r for r in results
+        if r.get("Status") == "🛑 CALL TO CUSTOMS"
+    ]
+
+    outcomes = {}
+
+    if not customs_results:
+        return outcomes
+
+    repo = get_repo()
+
+    if not repo:
+        for result in customs_results:
+            pbn = str(result.get("PBN ID", "")).strip().upper()
+            outcomes[pbn] = "⚠️ GitHub unavailable — not added"
+        return outcomes
+
+    try:
+        file_data = repo.get_contents(WATCHLIST_FILE, ref="main")
+        watchlist = json.loads(
+            file_data.decoded_content.decode("utf-8")
+        )
+
+        if not isinstance(watchlist, list):
+            raise ValueError("Watchlist must be a JSON list.")
+
+    except Exception as e:
+        st.error(f"Could not read GitHub watchlist: {e}")
+        for result in customs_results:
+            pbn = str(result.get("PBN ID", "")).strip().upper()
+            outcomes[pbn] = "⚠️ Could not read watchlist"
+        return outcomes
+
+    existing_pbns = {
+        str(item.get("pbn", "")).strip().upper()
+        for item in watchlist
+        if isinstance(item, dict)
+    }
+
+    additions = []
+
+    for result in customs_results:
+        pbn = str(result.get("PBN ID", "")).strip().upper()
+        trailer = str(result.get("Trailer", "Unknown")).strip() or "Unknown"
+
+        if not pbn:
+            outcomes[pbn] = "⚠️ Missing PBN — not added"
+
+        elif pbn in existing_pbns:
+            outcomes[pbn] = "👁️ Already on watchlist"
+
+        else:
+            additions.append({
+                "pbn": pbn,
+                "trailer": trailer,
+                "added_at": datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+            })
+            existing_pbns.add(pbn)
+            outcomes[pbn] = "🟠 Called to customs — Added to watchlist"
+
+    if additions:
+        watchlist.extend(additions)
+
+        try:
+            repo.update_file(
+                path=WATCHLIST_FILE,
+                message="Automatically add customs-called PBNs",
+                content=json.dumps(watchlist, indent=2),
+                sha=file_data.sha,
+                branch="main"
+            )
+
+            with open(WATCHLIST_FILE, "w", encoding="utf-8") as f:
+                json.dump(watchlist, f, indent=2)
+
+        except Exception as e:
+            st.error(f"GitHub could not save the watchlist update: {e}")
+
+            for item in additions:
+                outcomes[item["pbn"]] = (
+                    "⚠️ Save failed — check GitHub watchlist"
+                )
+
+    return outcomes
 
 
 # ============================================================
@@ -488,14 +577,33 @@ if st.button(
                     (idx + 1) / len(pbn_list)
                 )
 
-            st.session_state.results = results
+            
+# Automatically add any customs-called PBNs
+outcomes = auto_add_customs_calls(results)
 
-            status_text.empty()
-            progress_bar.empty()
+# Include the watchlist outcome in the results table
+for result in results:
+    pbn = str(result.get("PBN ID", "")).strip().upper()
+    result["Watchlist"] = outcomes.get(pbn, "—")
 
-            st.success(
-                f"All {len(results)} PBN checks complete!"
-            )
+st.session_state.watchlist_outcomes = outcomes
+st.session_state.results = results
+
+status_text.empty()
+progress_bar.empty()
+
+st.success(f"All {len(results)} PBN checks complete!")
+
+added_count = sum(
+    1 for outcome in outcomes.values()
+    if outcome == "🟠 Called to customs — Added to watchlist"
+)
+
+if added_count:
+    st.success(
+        f"{added_count} PBN(s) automatically added to the watchlist."
+    )
+
 
         except Exception as e:
 
