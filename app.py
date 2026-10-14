@@ -1,10 +1,11 @@
-
 import os
 import json
 import time
 import streamlit as st
+import pandas as pd
 
-from datetime import datetime
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from github import Github
 
 from selenium import webdriver
@@ -25,6 +26,7 @@ st.set_page_config(
 
 ROS_URL = "https://www.ros.ie/customs-roro-control-web/ros/freight/lookup"
 WATCHLIST_FILE = "watchlist.json"
+DUBLIN_TZ = ZoneInfo("Europe/Dublin")
 
 
 # ============================================================
@@ -201,7 +203,7 @@ def auto_add_customs_calls(results):
             additions.append({
                 "pbn": pbn,
                 "trailer": trailer,
-                "added_at": datetime.now().strftime(
+                "added_at": datetime.now(DUBLIN_TZ).strftime(
                     "%d/%m/%Y %H:%M:%S"
                 )
             })
@@ -239,6 +241,126 @@ def auto_add_customs_calls(results):
                 )
 
     return outcomes
+
+
+# ============================================================
+# QARGO EXCEL IMPORT
+# ============================================================
+
+def departure_to_utc(value):
+    """
+    Convert an Excel departure value to an aware UTC datetime.
+
+    Timestamp values that already contain an offset keep that offset.
+    Naive timestamps are interpreted as Europe/Dublin local time.
+    """
+
+    if pd.isna(value):
+        return None
+
+    try:
+        departure = pd.Timestamp(value)
+
+        if departure.tzinfo is None:
+            departure = departure.tz_localize(
+                DUBLIN_TZ,
+                ambiguous="NaT",
+                nonexistent="shift_forward"
+            )
+
+            if pd.isna(departure):
+                return None
+
+        else:
+            departure = departure.tz_convert("UTC")
+
+        return departure.tz_convert("UTC").to_pydatetime()
+
+    except Exception:
+        return None
+
+
+def get_eligible_pbns_from_excel(uploaded_file):
+    """
+    Read PBN and Intermodal Departure from the uploaded Excel file.
+
+    A PBN is eligible only once six full hours have passed after
+    its scheduled Intermodal Departure.
+    """
+
+    try:
+        dataframe = pd.read_excel(uploaded_file)
+    except Exception as e:
+        raise ValueError(
+            f"Could not read this Excel file: {e}"
+        ) from e
+
+    # Ignore leading/trailing spaces in column headings.
+    dataframe.columns = [
+        str(column).strip()
+        for column in dataframe.columns
+    ]
+
+    required_columns = {"PBN", "Intermodal Departure"}
+    missing_columns = required_columns - set(dataframe.columns)
+
+    if missing_columns:
+        missing = ", ".join(sorted(missing_columns))
+        raise ValueError(
+            "The Excel file is missing the required column(s): "
+            f"{missing}. The headings must include PBN and "
+            "Intermodal Departure."
+        )
+
+    now_utc = datetime.now(DUBLIN_TZ).astimezone(
+        ZoneInfo("UTC")
+    )
+
+    eligible_pbns = []
+    eligible_seen = set()
+    skipped_rows = []
+
+    for _, row in dataframe.iterrows():
+        pbn = str(row.get("PBN", "")).strip().upper()
+        departure_value = row.get("Intermodal Departure")
+
+        if not pbn or pbn.lower() in {"nan", "none", "nat"}:
+            skipped_rows.append({
+                "PBN": "",
+                "Intermodal Departure": str(departure_value),
+                "Reason": "No PBN in row"
+            })
+            continue
+
+        departure_utc = departure_to_utc(departure_value)
+
+        if departure_utc is None:
+            skipped_rows.append({
+                "PBN": pbn,
+                "Intermodal Departure": str(departure_value),
+                "Reason": "Missing or invalid departure time"
+            })
+            continue
+
+        eligible_after = departure_utc + timedelta(hours=6)
+
+        if now_utc < eligible_after:
+            eligible_local = eligible_after.astimezone(DUBLIN_TZ)
+            skipped_rows.append({
+                "PBN": pbn,
+                "Intermodal Departure": str(departure_value),
+                "Reason": (
+                    "Not eligible until "
+                    + eligible_local.strftime("%d/%m/%Y %H:%M %Z")
+                )
+            })
+            continue
+
+        if pbn not in eligible_seen:
+            eligible_pbns.append(pbn)
+            eligible_seen.add(pbn)
+
+    return eligible_pbns, skipped_rows, len(dataframe)
 
 
 # ============================================================
@@ -461,13 +583,14 @@ def check_pbn(driver, pbn):
 st.title("🚛 Customs PBN Batch Checker")
 
 st.write(
-    "Paste your PBN list below, check them against Revenue, "
-    "and automatically add CALL TO CUSTOMS entries to the watchlist."
+    "Paste PBNs manually, or upload a Qargo Excel export. "
+    "Uploaded PBNs are checked only after six hours have passed "
+    "since their scheduled Intermodal Departure."
 )
 
 st.caption(
     "Revenue Customs Channel Lookup • "
-    f"{datetime.now().strftime('%d/%m/%Y %H:%M:%S')}"
+    f"{datetime.now(DUBLIN_TZ).strftime('%d/%m/%Y %H:%M:%S %Z')}"
 )
 
 
@@ -483,14 +606,14 @@ if "watchlist_outcomes" not in st.session_state:
 
 
 # ============================================================
-# PBN CHECKER
+# INPUTS
 # ============================================================
 
-st.subheader("1. Check PBNs")
+st.subheader("1. Choose PBNs to Check")
 
 raw_pbns = st.text_area(
-    "Paste PBNs Here",
-    height=200,
+    "Option A — Paste PBNs Here",
+    height=160,
     placeholder=(
         "FK44CM93\n"
         "AV99EC76\n"
@@ -498,6 +621,26 @@ raw_pbns = st.text_area(
     )
 ).strip()
 
+uploaded_file = st.file_uploader(
+    "Option B — Drop your Qargo Excel file here",
+    type=["xlsx"],
+    help=(
+        "The spreadsheet must contain columns named PBN "
+        "and Intermodal Departure."
+    )
+)
+
+if uploaded_file:
+    st.info(
+        "Excel upload selected. The uploaded file takes priority "
+        "over the paste box. Only PBNs at least six hours past "
+        "their scheduled Intermodal Departure will be checked."
+    )
+
+
+# ============================================================
+# PBN CHECKER
+# ============================================================
 
 if st.button(
     "🔎 Check PBNs",
@@ -505,17 +648,52 @@ if st.button(
     use_container_width=True
 ):
 
-    pbn_list = [
-        p.strip().upper()
-        for p in raw_pbns.splitlines()
-        if p.strip()
-    ]
+    skipped_rows = []
 
-    # Remove duplicate PBNs from the input.
-    pbn_list = list(dict.fromkeys(pbn_list))
+    if uploaded_file is not None:
+        try:
+            pbn_list, skipped_rows, total_excel_rows = (
+                get_eligible_pbns_from_excel(uploaded_file)
+            )
+
+            st.info(
+                f"Read {total_excel_rows} spreadsheet row(s). "
+                f"{len(pbn_list)} PBN(s) are eligible for checking; "
+                f"{len(skipped_rows)} row(s) skipped."
+            )
+
+            if skipped_rows:
+                with st.expander(
+                    "View skipped PBNs / departures"
+                ):
+                    st.dataframe(
+                        pd.DataFrame(skipped_rows),
+                        use_container_width=True,
+                        hide_index=True
+                    )
+
+        except ValueError as e:
+            st.error(str(e))
+            pbn_list = []
+
+    else:
+        pbn_list = [
+            p.strip().upper()
+            for p in raw_pbns.splitlines()
+            if p.strip()
+        ]
+
+        # Remove duplicates while preserving input order.
+        pbn_list = list(dict.fromkeys(pbn_list))
 
     if not pbn_list:
-        st.warning("Please paste at least one PBN.")
+        if uploaded_file is None:
+            st.warning("Please paste at least one PBN.")
+        else:
+            st.warning(
+                "There are no eligible PBNs to check in this file. "
+                "Check the skipped rows above and try again later."
+            )
 
     else:
         results = []
@@ -552,7 +730,7 @@ if st.button(
             # Automatically add customs-called PBNs.
             outcomes = auto_add_customs_calls(results)
 
-            # Add the watchlist outcome to each results row.
+            # Include watchlist status in each results row.
             for result in results:
                 pbn = str(
                     result.get("PBN ID", "")
