@@ -17,6 +17,103 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Check whether watchlist has PBNs
+        id: watchlist_check
+        run: |
+          if [ ! -f watchlist.json ]; then
+            echo "❌ watchlist.json not found."
+            echo "has_items=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if ! python3 -c 'import json; json.load(open("watchlist.json", encoding="utf-8"))' 2>/dev/null; then
+            echo "⚠️ Invalid JSON. Continuing so watcher.py can report the problem."
+            echo "has_items=true" >> "$GITHUB_OUTPUT"
+          elif python3 -c 'import json,sys; data=json.load(open("watchlist.json", encoding="utf-8")); sys.exit(0 if isinstance(data,list) and len(data)>0 else 1)'; then
+            echo "✅ Watchlist contains PBNs. Continuing with checks."
+            echo "has_items=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ℹ️ Watchlist is empty. Skipping browser setup."
+            echo "has_items=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Python
+        if: steps.watchlist_check.outputs.has_items == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Google Chrome
+        if: steps.watchlist_check.outputs.has_items == 'true'
+        run: |
+          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub \
+            | gpg --dearmor \
+            | sudo tee /usr/share/keyrings/google-chrome.gpg > /dev/null
+
+          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" \
+            | sudo tee /etc/apt/sources.list.d/google-chrome.list
+
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+
+      - name: Remove old ChromeDriver
+        if: steps.watchlist_check.outputs.has_items == 'true'
+        run: |
+          sudo rm -f /usr/bin/chromedriver
+          sudo rm -f /usr/local/bin/chromedriver
+          echo "Chrome:"
+          google-chrome --version
+          echo "ChromeDriver in PATH:"
+          which chromedriver || echo "No system ChromeDriver - Selenium Manager will provide it."
+
+      - name: Install Python dependencies
+        if: steps.watchlist_check.outputs.has_items == 'true'
+        run: |
+          python -m pip install --upgrade pip
+          pip install selenium requests
+
+      - name: Run PBN watcher
+        if: steps.watchlist_check.outputs.has_items == 'true'
+        env:
+          GOOGLE_CHAT_WEBHOOK: ${{ secrets.GOOGLE_CHAT_WEBHOOK }}
+        run: |
+          python watcher.py
+
+      - name: Upload ROS result screenshots
+        if: always() && steps.watchlist_check.outputs.has_items == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ros-result-screenshots
+          path: |
+            ros_result_*.png
+            debug_*.png
+            debug_*.html
+          if-no-files-found: ignore
+
+      - name: Commit updated watchlist
+        if: steps.watchlist_check.outputs.has_items == 'true'
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Auto-update watchlist after check"
+          file_pattern: watchlist.jsonname: check-watchlist
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/15 * * * *"
+
+jobs:
+  check-pbn:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Diagnose watchlist
         run: |
           echo "Current directory:"
