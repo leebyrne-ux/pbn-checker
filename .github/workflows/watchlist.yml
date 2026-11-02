@@ -3,7 +3,14 @@ name: check-watchlist
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 */6 * * *"
+    # Monday to Friday: 04:00–20:30
+    - cron: "0,30 4-20 * * 1-5"
+
+    # Saturday: 04:00–16:30
+    - cron: "0,30 4-16 * * 6"
+
+    # Sunday: 12:00–16:30
+    - cron: "0,30 12-16 * * 0"
 
 jobs:
   check-pbn:
