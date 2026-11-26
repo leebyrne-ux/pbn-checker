@@ -2,6 +2,7 @@ import os
 import json
 import time
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 
 from datetime import datetime, timedelta
@@ -577,6 +578,51 @@ def check_pbn(driver, pbn):
 
 
 # ============================================================
+# COMMAND CENTER SYNC BRIDGE
+# ============================================================
+
+def broadcast_watchlist_to_hub(items):
+    """Send the active watchlist items to the parent Command Center iframe."""
+
+    formatted_trailers = []
+
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+
+        trailer = str(item.get("trailer", "Unknown")).strip()
+        pbn = str(item.get("pbn", "N/A")).strip()
+        added_at = str(item.get("added_at", "")).strip()
+
+        # Format time cleanly for the hub badge (extract HH:MM if full timestamp is present)
+        short_time = added_at
+        if " " in added_at:
+            parts = added_at.split(" ")
+            if len(parts) > 1 and len(parts[1]) >= 5:
+                short_time = parts[1][:5]
+
+        formatted_trailers.append({
+            "trailer": trailer if trailer and trailer != "Unknown" else pbn,
+            "note": f"PBN: {pbn} • Call to Customs",
+            "time": short_time
+        })
+
+    payload_json = json.dumps(formatted_trailers)
+
+    components.html(
+        f"""
+        <script>
+          window.parent.postMessage({{
+            type: "PBN_WATCHLIST_UPDATE",
+            trailers: {payload_json}
+          }}, "*");
+        </script>
+        """,
+        height=0,
+    )
+
+
+# ============================================================
 # PAGE HEADER
 # ============================================================
 
@@ -835,6 +881,9 @@ st.subheader("👁️ Active Watchlist")
 
 items = load_data()
 
+# Push the current watchlist state to the Command Center Overview
+broadcast_watchlist_to_hub(items)
+
 if not items:
     st.info("Watchlist is empty.")
 
@@ -867,8 +916,8 @@ else:
                 latest_items = load_data()
 
                 latest_items = [
-                    item for item in latest_items
-                    if str(item.get("pbn", "")).upper()
+                    existing for existing in latest_items
+                    if str(existing.get("pbn", "")).upper()
                     != str(pbn).upper()
                 ]
 
